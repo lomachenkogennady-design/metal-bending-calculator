@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-D3y7YRUc.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CJCN2odk.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -56386,7 +56386,11 @@ function Results({ input, result, geom }) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-amber-600", children: "▣" }),
             " 3D-модель"
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-slate-500", children: "вращайте мышью" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-slate-500", children: [
+            "t=",
+            input.thickness,
+            " мм · вращайте мышью"
+          ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-[340px] bg-gradient-to-b from-slate-50 to-slate-100", children: result.ok && /* @__PURE__ */ jsxRuntimeExports.jsx(Scene3D, { geom, length: input.length, color: mat.color }) })
       ] }),
@@ -56412,7 +56416,9 @@ function Results({ input, result, geom }) {
             " Развёртка заготовки"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-slate-500", children: [
-            "K=",
+            "t=",
+            input.thickness,
+            " мм · K=",
             fmt2(result.kFactor)
           ] })
         ] }),
@@ -57109,4 +57115,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-PavSDhSW.js.map
+//# sourceMappingURL=index-6DlIkM3A.js.map
