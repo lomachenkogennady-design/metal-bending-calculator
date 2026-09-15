@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CqVejDQ5.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-2POr3M-s.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24663,6 +24663,59 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
     document.body.removeChild(a2);
   }, 1500);
 }
+function NumberField({
+  value,
+  onChange,
+  min = 0,
+  max,
+  step,
+  placeholder = "0",
+  className = "field"
+}) {
+  const [text, setText] = reactExports.useState(
+    () => value === 0 || value == null ? "" : String(value)
+  );
+  reactExports.useEffect(() => {
+    const parsed = text === "" || text === "." ? 0 : Number(text);
+    if (parsed !== value) {
+      setText(value === 0 || value == null ? "" : String(value));
+    }
+  }, [value]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "input",
+    {
+      type: "text",
+      inputMode: "decimal",
+      className,
+      value: text,
+      placeholder,
+      onChange: (e) => {
+        let raw = e.target.value.replace(",", ".").replace(/[^0-9.]/g, "");
+        const parts = raw.split(".");
+        if (parts.length > 2) raw = parts[0] + "." + parts.slice(1).join("");
+        setText(raw);
+        if (raw === "" || raw === ".") {
+          onChange(0);
+          return;
+        }
+        let n = Number(raw);
+        if (!isFinite(n)) return;
+        if (min != null) n = Math.max(min, n);
+        if (max != null) n = Math.min(max, n);
+        onChange(n);
+      },
+      onBlur: () => {
+        const n = text === "" || text === "." ? 0 : Number(text);
+        let final = n;
+        if (step) final = Math.round(n / step) * step;
+        if (min != null) final = Math.max(min, final);
+        if (max != null) final = Math.min(max, final);
+        setText(final === 0 ? "" : String(final));
+        if (final !== value) onChange(final);
+      }
+    }
+  );
+}
 function ManualTab({ input, onChange, onAdd, added }) {
   const prof = PROFILES.find((p2) => p2.id === input.profileId);
   const setFlange = (i2, v2) => {
@@ -24679,7 +24732,15 @@ function ManualTab({ input, onChange, onAdd, added }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Материал" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("select", { className: "field", value: input.materialId, onChange: (e) => onChange({ materialId: e.target.value }), children: MATERIALS.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m2.id, children: m2.name }, m2.id)) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "select",
+          {
+            className: "field",
+            value: input.materialId,
+            onChange: (e) => onChange({ materialId: e.target.value }),
+            children: MATERIALS.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m2.id, children: m2.name }, m2.id))
+          }
+        )
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
@@ -24703,7 +24764,11 @@ function ManualTab({ input, onChange, onAdd, added }) {
           "button",
           {
             type: "button",
-            onClick: () => onChange({ profileId: p2.id, flanges: [...p2.flanges], angles: p2.flanges.map(() => 90) }),
+            onClick: () => onChange({
+              profileId: p2.id,
+              flanges: [...p2.flanges],
+              angles: p2.flanges.map(() => 90)
+            }),
             className: `rounded-lg border px-1 py-2.5 text-[11px] font-semibold transition ${input.profileId === p2.id ? "border-amber-500 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(245,158,11,0.15)]" : "border-slate-300 bg-white text-slate-500 hover:border-slate-400"}`,
             children: [
               p2.name,
@@ -24715,7 +24780,8 @@ function ManualTab({ input, onChange, onAdd, added }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
-          "Полки (внешние размеры) ",
+          "Полки (внешние размеры)",
+          " ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "мм · по ходу контура" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: prof.flanges.map((_2, i2) => {
@@ -24726,14 +24792,13 @@ function ManualTab({ input, onChange, onAdd, added }) {
               i2 + 1
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field text-center",
                 value: (_a3 = input.flanges[i2]) != null ? _a3 : prof.flanges[i2],
+                onChange: (v2) => setFlange(i2, v2),
                 min: 5,
                 step: 1,
-                onChange: (e) => setFlange(i2, Number(e.target.value))
+                className: "field text-center"
               }
             )
           ] }, i2);
@@ -24752,15 +24817,14 @@ function ManualTab({ input, onChange, onAdd, added }) {
               i2 + 1
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field text-center",
                 value: (_a3 = input.angles[i2]) != null ? _a3 : 90,
+                onChange: (v2) => setAngle(i2, v2),
                 min: 10,
                 max: 170,
                 step: 5,
-                onChange: (e) => setAngle(i2, Number(e.target.value))
+                className: "field text-center"
               }
             )
           ] }, i2);
@@ -24788,28 +24852,24 @@ function ManualTab({ input, onChange, onAdd, added }) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Длина изделия, мм" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
               value: input.length,
-              min: 10,
+              onChange: (v2) => onChange({ length: v2 }),
               step: 10,
-              onChange: (e) => onChange({ length: Number(e.target.value) })
+              min: 10
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Количество, шт" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
               value: input.quantity,
-              min: 1,
+              onChange: (v2) => onChange({ quantity: v2 }),
               step: 1,
-              onChange: (e) => onChange({ quantity: Number(e.target.value) })
+              min: 1
             }
           )
         ] })
@@ -24833,48 +24893,50 @@ function ManualTab({ input, onChange, onAdd, added }) {
             )
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
               value: input.vMatrix,
-              min: 2,
+              onChange: (v2) => onChange({ vMatrix: v2 }),
               step: 0.5,
-              onChange: (e) => onChange({ vMatrix: Number(e.target.value) })
+              min: 2
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Внутр. радиус R, мм" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "text", readOnly: true, className: "field field-readonly", value: fmt2(innerRadiusFromV(input.vMatrix)) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "text",
+              readOnly: true,
+              className: "field field-readonly",
+              value: fmt2(innerRadiusFromV(input.vMatrix))
+            }
+          )
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Тоннаж пресса, т" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
               value: input.pressTon,
-              min: 1,
+              onChange: (v2) => onChange({ pressTon: v2 }),
               step: 5,
-              onChange: (e) => onChange({ pressTon: Number(e.target.value) })
+              min: 1
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Наладка, ₽" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
               value: input.setupCost,
-              min: 0,
+              onChange: (v2) => onChange({ setupCost: v2 }),
               step: 10,
-              onChange: (e) => onChange({ setupCost: Number(e.target.value) })
+              min: 0
             }
           )
         ] })
@@ -24883,32 +24945,23 @@ function ManualTab({ input, onChange, onAdd, added }) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Металл, ₽/кг" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
-              value: input.metalPrice === 0 ? "" : input.metalPrice,
-              placeholder: "0",
-              min: 0,
-              step: 0.5,
-              onChange: (e) => {
-                const v2 = e.target.value;
-                onChange({ metalPrice: v2 === "" ? 0 : Math.max(0, Number(v2)) });
-              }
+              value: input.metalPrice,
+              onChange: (v2) => onChange({ metalPrice: v2 }),
+              step: 0.5
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Гиб, ₽/м" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+            NumberField,
             {
-              type: "number",
-              className: "field",
               value: input.pricePerMeter,
-              min: 0,
+              onChange: (v2) => onChange({ pricePerMeter: v2 }),
               step: 1,
-              onChange: (e) => onChange({ pricePerMeter: Number(e.target.value) })
+              min: 0
             }
           )
         ] })
@@ -85575,29 +85628,44 @@ function ProfileCanvas({ geom, angles, className }) {
   reactExports.useEffect(() => {
     const cv = ref.current;
     if (!cv) return;
-    const parent = cv.parentElement;
+    const rect = cv.getBoundingClientRect();
+    const W2 = Math.max(100, rect.width);
+    const H2 = Math.max(100, rect.height);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W2 = parent.clientWidth;
-    const H2 = parent.clientHeight;
-    cv.width = W2 * dpr;
-    cv.height = H2 * dpr;
-    cv.style.width = W2 + "px";
-    cv.style.height = H2 + "px";
+    cv.width = Math.round(W2 * dpr);
+    cv.height = Math.round(H2 * dpr);
     const ctx = cv.getContext("2d");
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W2, H2);
-    const { polygon, moldPoints, bbox, thickness, radius } = geom;
-    const bw = bbox.maxX - bbox.minX || 1;
-    const bh = bbox.maxY - bbox.minY || 1;
-    const padX = 84, padTop = 40, padBot = 30;
-    const scale = Math.min((W2 - padX * 2) / bw, (H2 - padTop - padBot) / bh);
-    const ox = (W2 - bw * scale) / 2 - bbox.minX * scale;
-    const oy = (H2 - bh * scale) / 2 + bbox.maxY * scale;
-    const P2 = (p2) => [ox + p2.x * scale, oy - p2.y * scale];
+    const { polygon, moldPoints, thickness, radius } = geom;
+    if (!polygon || polygon.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p2 of polygon) {
+      if (p2.x < minX) minX = p2.x;
+      if (p2.x > maxX) maxX = p2.x;
+      if (p2.y < minY) minY = p2.y;
+      if (p2.y > maxY) maxY = p2.y;
+    }
+    if (!isFinite(minX)) return;
+    const bw = maxX - minX || 1;
+    const bh = maxY - minY || 1;
+    const padL = 56, padR = 56, padT = 38, padB = 48;
+    const availW = Math.max(40, W2 - padL - padR);
+    const availH = Math.max(40, H2 - padT - padB);
+    const scale = Math.min(availW / bw, availH / bh);
+    const dataCX = (minX + maxX) / 2;
+    const dataCY = (minY + maxY) / 2;
+    const centerX = padL + availW / 2;
+    const centerY = padT + availH / 2;
+    const P2 = (p2) => [
+      centerX + (p2.x - dataCX) * scale,
+      centerY - (p2.y - dataCY) * scale
+    ];
     ctx.beginPath();
     polygon.forEach((p2, i2) => {
       const [x2, y2] = P2(p2);
-      i2 === 0 ? ctx.moveTo(x2, y2) : ctx.lineTo(x2, y2);
+      if (i2 === 0) ctx.moveTo(x2, y2);
+      else ctx.lineTo(x2, y2);
     });
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, 0, 0, H2);
@@ -85645,6 +85713,7 @@ function ProfileCanvas({ geom, angles, className }) {
       arrow(px2, yDim, 0);
       ctx.font = mono;
       ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
       ctx.fillText(label, (px12 + px2) / 2, yDim - 6);
     };
     const dimV = (py12, py2, xDim, label) => {
@@ -85664,18 +85733,17 @@ function ProfileCanvas({ geom, angles, className }) {
       ctx.save();
       ctx.font = mono;
       ctx.textAlign = "center";
-      ctx.translate(xDim - 6, (py12 + py2) / 2);
+      ctx.textBaseline = "alphabetic";
+      ctx.translate(xDim - 8, (py12 + py2) / 2);
       ctx.rotate(-Math.PI / 2);
       ctx.fillText(label, 0, 0);
       ctx.restore();
     };
-    const [px0] = P2({ x: bbox.minX, y: bbox.minY });
-    const [px1] = P2({ x: bbox.maxX, y: bbox.minY });
-    const [, py0] = P2({ x: bbox.minX, y: bbox.minY });
-    const [, py1] = P2({ x: bbox.minX, y: bbox.maxY });
-    dimH(px0, px1, py0 + 22, `${bw.toFixed(1)} мм`);
+    const [px0, py0] = P2({ x: minX, y: minY });
+    const [px1, py1] = P2({ x: maxX, y: maxY });
+    dimH(px0, px1, py1 + (py0 - py1) + 22, `${bw.toFixed(1)} мм`);
     dimV(py1, py0, px0 - 22, `${bh.toFixed(1)} мм`);
-    if (moldPoints.length > 1) {
+    if (moldPoints && moldPoints.length > 1) {
       const ml = moldPoints[moldPoints.length - 1];
       const [rx, ry] = P2(ml);
       ctx.strokeStyle = "#b45309";
@@ -85686,6 +85754,7 @@ function ProfileCanvas({ geom, angles, className }) {
       ctx.stroke();
       ctx.font = mono;
       ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
       ctx.fillText(`R${radius} · t${thickness}`, rx + 7, ry + 13);
     }
   }, [geom, angles, resizeTick]);
@@ -85703,23 +85772,23 @@ function FlatCanvas({ flat, length, straights, allowances, angles, className }) 
     var _a3, _b2, _c;
     const cv = ref.current;
     if (!cv || flat <= 0) return;
-    const parent = cv.parentElement;
+    const rect = cv.getBoundingClientRect();
+    const W2 = Math.max(100, rect.width);
+    const H2 = Math.max(100, rect.height);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const W2 = parent.clientWidth;
-    const H2 = parent.clientHeight;
-    cv.width = W2 * dpr;
-    cv.height = H2 * dpr;
-    cv.style.width = W2 + "px";
-    cv.style.height = H2 + "px";
+    cv.width = Math.round(W2 * dpr);
+    cv.height = Math.round(H2 * dpr);
     const ctx = cv.getContext("2d");
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W2, H2);
-    const padX = 70, padY = 34;
-    const scale = Math.min((W2 - padX * 2) / flat, (H2 - padY * 2.4) / Math.max(length, 1));
+    const padL = 70, padR = 90, padT = 38, padB = 50;
+    const availW = Math.max(40, W2 - padL - padR);
+    const availH = Math.max(40, H2 - padT - padB);
+    const scale = Math.min(availW / flat, availH / Math.max(length, 1));
     const rw = flat * scale;
     const rh = Math.max(14, length * scale);
-    const x0 = (W2 - rw) / 2;
-    const y0 = (H2 - rh) / 2 - 6;
+    const x0 = padL + (availW - rw) / 2;
+    const y0 = padT + (availH - rh) / 2;
     const grad = ctx.createLinearGradient(0, y0, 0, y0 + rh);
     grad.addColorStop(0, "#dbe4f0");
     grad.addColorStop(1, "#c3cfe0");
@@ -85794,9 +85863,9 @@ function FlatCanvas({ flat, length, straights, allowances, angles, className }) 
     ctx.font = "600 11px 'JetBrains Mono', monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(`РАЗВЁРТКА ${fmt(Math.round(flat * 10) / 10)} мм`, x0 + rw / 2, dy - 6);
+    ctx.fillText(`РАЗВЁРТКА ${fmt(Math.round(flat * 10) / 10)} мм`, x0 + rw / 2, dy + 14);
     ctx.textAlign = "left";
-    ctx.fillText(`L=${fmt(length)}`, x0 + rw + 10, y0 + rh / 2);
+    ctx.fillText(`L=${fmt(length)}`, x0 + rw + 12, y0 + rh / 2);
     ctx.strokeStyle = ink;
     ctx.beginPath();
     ctx.moveTo(x0 + rw + 6, y0);
@@ -86556,4 +86625,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DnPDU3NB.js.map
+//# sourceMappingURL=index-CBxb8WL7.js.map
