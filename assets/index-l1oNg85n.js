@@ -23923,7 +23923,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DpuqTX6g.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CwPHB8vi.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24630,6 +24630,74 @@ E.API.PDFObject = (function() {
     return "" + r;
   }, e;
 })();
+function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h) {
+  const pieces = [];
+  const unplaced = [];
+  for (const p2 of parts) {
+    for (let i2 = 0; i2 < p2.qty; i2++) {
+      let w2 = p2.width, h2 = p2.height, rot2 = false;
+      if (h2 > sheetH && w2 <= sheetH) {
+        [w2, h2] = [h2, w2];
+        rot2 = true;
+      }
+      if (w2 > sheetW || h2 > sheetH) {
+        if (!unplaced.find((u2) => u2.id === p2.id)) unplaced.push(p2);
+        continue;
+      }
+      pieces.push({ part: p2, w: w2, h: h2, rot: rot2 });
+    }
+  }
+  pieces.sort((a2, b2) => b2.h - a2.h || b2.w - a2.w);
+  const sheets = [];
+  const GAP = 2;
+  for (const piece of pieces) {
+    let placed = false;
+    for (const sheet of sheets) {
+      const shelves = [];
+      for (const q2 of sheet.placed) {
+        let s2 = shelves.find((sh) => sh.y === q2.y);
+        if (!s2) {
+          s2 = { y: q2.y, h: q2.h, usedX: 0 };
+          shelves.push(s2);
+        }
+        s2.usedX = Math.max(s2.usedX, q2.x + q2.w + GAP);
+        s2.h = Math.max(s2.h, q2.h);
+      }
+      for (const s2 of shelves) {
+        if (piece.h <= s2.h && s2.usedX + piece.w <= sheetW) {
+          sheet.placed.push({ ...piece.part, x: s2.usedX, y: s2.y, rot: piece.rot, w: piece.w, h: piece.h });
+          sheet.usedArea += piece.w * piece.h;
+          placed = true;
+          break;
+        }
+      }
+      if (placed) break;
+      const nextY = sheet.placed.length === 0 ? 0 : Math.max(...sheet.placed.map((q2) => q2.y + q2.h)) + GAP;
+      if (nextY + piece.h <= sheetH && piece.w <= sheetW) {
+        sheet.placed.push({ ...piece.part, x: 0, y: nextY, rot: piece.rot, w: piece.w, h: piece.h });
+        sheet.usedArea += piece.w * piece.h;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const sheet = { index: sheets.length + 1, placed: [], usedArea: 0 };
+      sheet.placed.push({ ...piece.part, x: 0, y: 0, rot: piece.rot, w: piece.w, h: piece.h });
+      sheet.usedArea = piece.w * piece.h;
+      sheets.push(sheet);
+    }
+  }
+  const totalArea = sheets.length * sheetW * sheetH;
+  const usedArea = sheets.reduce((s2, sh) => s2 + sh.usedArea, 0);
+  return {
+    sheets,
+    sheetCount: sheets.length,
+    utilization: totalArea > 0 ? usedArea / totalArea : 0,
+    sheetW,
+    sheetH,
+    unplaced
+  };
+}
 const robotoRegularUrl = "/metal-bending-calculator/assets/Roboto-Regular-DPspvn0D.ttf";
 const robotoBoldUrl = "/metal-bending-calculator/assets/Roboto-Bold-BtpdIk24.ttf";
 const nf0$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
@@ -24814,6 +24882,38 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.text(`${fmt0$1(tot.total)} ₽`, mx + cw - 2, y2 + 4.8, { align: "right" });
   pdf.setTextColor(0);
   y2 += rowH + 8;
+  const nestingParts = items.filter((it2) => it2.flat && it2.length).map((it2, i2) => ({
+    id: it2.id || `part-${i2}`,
+    title: it2.title,
+    width: it2.flat,
+    height: it2.length,
+    qty: it2.qty
+  }));
+  if (nestingParts.length > 0) {
+    const nest = nestOnSheets(nestingParts);
+    ensureSpace(30);
+    pdf.setFont(FONT, "bold");
+    pdf.setFontSize(9);
+    pdf.setTextColor(15, 23, 42);
+    pdf.text(`Раскрой на листах ${nest.sheetW}×${nest.sheetH} мм`, mx, y2);
+    y2 += 4;
+    pdf.setFont(FONT, "normal");
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(60);
+    pdf.text(
+      `Листов: ${nest.sheetCount}  ·  Использование: ${(nest.utilization * 100).toFixed(1)} %  ·  Деталей: ${nest.sheets.reduce((s2, sh) => s2 + sh.placed.length, 0)}`,
+      mx,
+      y2
+    );
+    y2 += 4;
+    pdf.setFontSize(8);
+    pdf.setTextColor(120);
+    const perSheet = nest.sheets.map((sh, i2) => `Лист ${i2 + 1}: ${sh.placed.length}`).join(" · ");
+    pdf.text(perSheet, mx, y2, { maxWidth: cw });
+    y2 += 6;
+    pdf.setTextColor(0);
+  }
+  ensureSpace(20);
   pdf.setFont(FONT, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(90);
@@ -57452,74 +57552,6 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onExportInvoice, onP
     ] })
   ] });
 }
-function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h) {
-  const pieces = [];
-  const unplaced = [];
-  for (const p2 of parts) {
-    for (let i2 = 0; i2 < p2.qty; i2++) {
-      let w2 = p2.width, h2 = p2.height, rot2 = false;
-      if (h2 > sheetH && w2 <= sheetH) {
-        [w2, h2] = [h2, w2];
-        rot2 = true;
-      }
-      if (w2 > sheetW || h2 > sheetH) {
-        if (!unplaced.find((u2) => u2.id === p2.id)) unplaced.push(p2);
-        continue;
-      }
-      pieces.push({ part: p2, w: w2, h: h2, rot: rot2 });
-    }
-  }
-  pieces.sort((a2, b2) => b2.h - a2.h || b2.w - a2.w);
-  const sheets = [];
-  const GAP = 2;
-  for (const piece of pieces) {
-    let placed = false;
-    for (const sheet of sheets) {
-      const shelves = [];
-      for (const q2 of sheet.placed) {
-        let s2 = shelves.find((sh) => sh.y === q2.y);
-        if (!s2) {
-          s2 = { y: q2.y, h: q2.h, usedX: 0 };
-          shelves.push(s2);
-        }
-        s2.usedX = Math.max(s2.usedX, q2.x + q2.w + GAP);
-        s2.h = Math.max(s2.h, q2.h);
-      }
-      for (const s2 of shelves) {
-        if (piece.h <= s2.h && s2.usedX + piece.w <= sheetW) {
-          sheet.placed.push({ ...piece.part, x: s2.usedX, y: s2.y, rot: piece.rot, w: piece.w, h: piece.h });
-          sheet.usedArea += piece.w * piece.h;
-          placed = true;
-          break;
-        }
-      }
-      if (placed) break;
-      const nextY = sheet.placed.length === 0 ? 0 : Math.max(...sheet.placed.map((q2) => q2.y + q2.h)) + GAP;
-      if (nextY + piece.h <= sheetH && piece.w <= sheetW) {
-        sheet.placed.push({ ...piece.part, x: 0, y: nextY, rot: piece.rot, w: piece.w, h: piece.h });
-        sheet.usedArea += piece.w * piece.h;
-        placed = true;
-        break;
-      }
-    }
-    if (!placed) {
-      const sheet = { index: sheets.length + 1, placed: [], usedArea: 0 };
-      sheet.placed.push({ ...piece.part, x: 0, y: 0, rot: piece.rot, w: piece.w, h: piece.h });
-      sheet.usedArea = piece.w * piece.h;
-      sheets.push(sheet);
-    }
-  }
-  const totalArea = sheets.length * sheetW * sheetH;
-  const usedArea = sheets.reduce((s2, sh) => s2 + sh.usedArea, 0);
-  return {
-    sheets,
-    sheetCount: sheets.length,
-    utilization: totalArea > 0 ? usedArea / totalArea : 0,
-    sheetW,
-    sheetH,
-    unplaced
-  };
-}
 const COLORS$1 = [
   "#f59e0b",
   "#ef4444",
@@ -57968,6 +58000,49 @@ function ReportPrint({ items, date }) {
         ] })
       ] })
     ] }),
+    items.length > 0 && (() => {
+      const nestingParts = items.filter((it2) => it2.flat && it2.length).map((it2, i2) => ({
+        id: it2.id || `part-${i2}`,
+        title: it2.title,
+        width: it2.flat,
+        height: it2.length,
+        qty: it2.qty
+      }));
+      if (nestingParts.length === 0) return null;
+      const nest = nestOnSheets(nestingParts);
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 14, fontSize: 11, border: "1px solid #cbd5e1", borderRadius: 8, padding: "10px 14px", background: "#f8fafc" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontWeight: 700, fontSize: 12, marginBottom: 6, color: "#0f172a" }, children: [
+          "РАСКРОЙ НА ЛИСТАХ ",
+          nest.sheetW,
+          "×",
+          nest.sheetH,
+          " мм"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: 20, marginBottom: 6 }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            "Листов: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: nest.sheetCount })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            "Использование: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("b", { children: [
+              (nest.utilization * 100).toFixed(1),
+              " %"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            "Деталей: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: nest.sheets.reduce((s2, sh) => s2 + sh.placed.length, 0) })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 10, color: "#64748b" }, children: nest.sheets.map((sh, i2) => `Лист ${i2 + 1}: ${sh.placed.length} дет.`).join(" · ") }),
+        nest.unplaced.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 6, color: "#b91c1c", fontSize: 10 }, children: [
+          "⛔ Не размещено: ",
+          nest.unplaced.map((u2) => u2.title).join(", "),
+          " — превышает габарит листа"
+        ] })
+      ] });
+    })(),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 14, fontSize: 10.5, color: "#475569", lineHeight: 1.7, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Условия:" }),
       " цены указаны на дату расчёта и не являются публичной офертой. Стоимость металла включает отходы раскроя 7 %. Наладка инструмента — ",
@@ -58289,4 +58364,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-CtU3wILh.js.map
+//# sourceMappingURL=index-l1oNg85n.js.map
