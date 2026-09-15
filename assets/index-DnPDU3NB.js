@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-pwk1L5H0.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CqVejDQ5.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24480,31 +24480,53 @@ E.API.PDFObject = (function() {
     return "" + r;
   }, e;
 })();
+const robotoRegularUrl = "/metal-bending-calculator/assets/Roboto-Regular-DPspvn0D.ttf";
+const robotoBoldUrl = "/metal-bending-calculator/assets/Roboto-Bold-BtpdIk24.ttf";
 const nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf1$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 const fmt0 = (v2) => nf0.format(v2);
 const fmt1 = (v2) => nf1$1.format(v2);
+async function loadFontAsBase64(url) {
+  const buf = await fetch(url).then((r) => r.arrayBuffer());
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const chunk = 32768;
+  for (let i2 = 0; i2 < bytes.length; i2 += chunk) {
+    const sub = bytes.subarray(i2, i2 + chunk);
+    binary += String.fromCharCode.apply(null, Array.from(sub));
+  }
+  return btoa(binary);
+}
 async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Date()) {
   var _a3, _b2;
   const tot = cartTotals(items);
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const pdf = new E("p", "mm", "a4");
+  const [regularB64, boldB64] = await Promise.all([
+    loadFontAsBase64(robotoRegularUrl),
+    loadFontAsBase64(robotoBoldUrl)
+  ]);
+  pdf.addFileToVFS("Roboto-Regular.ttf", regularB64);
+  pdf.addFileToVFS("Roboto-Bold.ttf", boldB64);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.addFont("Roboto-Bold.ttf", "Roboto", "bold");
+  const FONT = "Roboto";
   const pageW = 210, pageH = 297, mx = 12, cw = pageW - mx * 2;
   let y2 = 16;
   const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
   const num = `КГ-${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  pdf.setFont("helvetica", "bold");
+  pdf.setFont(FONT, "bold");
   pdf.setFontSize(16);
   pdf.text("ООО «ФАЙЕРПРОМ»", mx, y2);
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont(FONT, "normal");
   pdf.setFontSize(8.5);
   pdf.setTextColor(100);
   pdf.text("Гибка листового металла · лазерный раскрой · металлоконструкции", mx, y2 + 4.5);
   pdf.setTextColor(0);
-  pdf.setFont("helvetica", "bold");
+  pdf.setFont(FONT, "bold");
   pdf.setFontSize(12);
   pdf.text(`СМЕТА № ${num}`, pageW - mx, y2, { align: "right" });
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont(FONT, "normal");
   pdf.setFontSize(9);
   pdf.text(`от ${dateStr}`, pageW - mx, y2 + 4.5, { align: "right" });
   y2 += 9;
@@ -24521,16 +24543,16 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.setTextColor(0);
   y2 += 8;
   const cols = [
-    { key: "n", label: "№", w: 8, align: "center" },
-    { key: "name", label: "Наименование", w: 40, align: "left" },
-    { key: "mat", label: "Материал", w: 20, align: "left" },
+    { key: "n", label: "№", w: 7, align: "center" },
+    { key: "name", label: "Наименование", w: 42, align: "left" },
+    { key: "mat", label: "Материал", w: 22, align: "left" },
     { key: "th", label: "Толщ.", w: 12, align: "center" },
     { key: "bnd", label: "Гиб.", w: 10, align: "center" },
-    { key: "fl", label: "Разв., мм", w: 17, align: "right" },
-    { key: "len", label: "Длина, мм", w: 18, align: "right" },
-    { key: "qty", label: "Кол.", w: 12, align: "right" },
-    { key: "wt", label: "Вес, кг", w: 16, align: "right" },
-    { key: "tot", label: "Итого, ₽", w: cw - 8 - 40 - 20 - 12 - 10 - 17 - 18 - 12 - 16, align: "right" }
+    { key: "fl", label: "Разв., мм", w: 16, align: "right" },
+    { key: "len", label: "Длина, мм", w: 16, align: "right" },
+    { key: "qty", label: "Кол.", w: 10, align: "right" },
+    { key: "wt", label: "Вес, кг", w: 14, align: "right" },
+    { key: "tot", label: "Итого, ₽", w: cw - 7 - 42 - 22 - 12 - 10 - 16 - 16 - 10 - 14, align: "right" }
   ];
   const rowH = 7;
   const cellText = (key, it2, i2) => {
@@ -24563,7 +24585,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   const drawHeader = () => {
     pdf.setFillColor(238, 242, 247);
     pdf.rect(mx, y2, cw, rowH, "F");
-    pdf.setFont("helvetica", "bold");
+    pdf.setFont(FONT, "bold");
     pdf.setFontSize(7.5);
     let x2 = mx;
     cols.forEach((c2) => {
@@ -24571,11 +24593,17 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       pdf.text(c2.label, tx, y2 + 4.7, { align: c2.align });
       x2 += c2.w;
     });
-    pdf.setDrawColor(203, 213, 225);
-    pdf.setLineWidth(0.2);
+    pdf.setDrawColor(150, 160, 175);
+    pdf.setLineWidth(0.25);
+    let vx = mx;
+    cols.forEach((c2) => {
+      pdf.line(vx, y2, vx, y2 + rowH);
+      vx += c2.w;
+    });
+    pdf.line(vx, y2, vx, y2 + rowH);
     pdf.rect(mx, y2, cw, rowH);
     y2 += rowH;
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(FONT, "normal");
     pdf.setFontSize(8);
   };
   const ensureSpace = (need) => {
@@ -24595,14 +24623,14 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       pdf.text(txt, tx, y2 + 4.7, { align: c2.align, maxWidth: c2.w - 2 });
       x2 += c2.w;
     });
-    pdf.setDrawColor(226, 232, 240);
+    pdf.setDrawColor(180, 190, 205);
     pdf.line(mx, y2 + rowH, mx + cw, y2 + rowH);
     y2 += rowH;
   });
   ensureSpace(rowH + 2);
   pdf.setFillColor(15, 23, 42);
   pdf.setTextColor(255);
-  pdf.setFont("helvetica", "bold");
+  pdf.setFont(FONT, "bold");
   pdf.setFontSize(9);
   pdf.rect(mx, y2, cw, rowH, "F");
   pdf.text("ИТОГО:", mx + cw - 60, y2 + 4.8, { align: "right" });
@@ -24610,7 +24638,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.text(`${fmt0(tot.total)} ₽`, mx + cw - 2, y2 + 4.8, { align: "right" });
   pdf.setTextColor(0);
   y2 += rowH + 8;
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont(FONT, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(90);
   const cond = `Условия: цены указаны на дату расчёта и не являются публичной офертой. Стоимость металла включает отходы раскроя 7 %. Наладка инструмента — ${fmt0(tot.setup)} ₽ (при партии от 10 шт. — бесплатно). Срок изготовления: от 3 рабочих дней. Расчёт развёртки выполнен по методике DIN 6935 (K-фактор), усилие гибки — по формуле воздушной гибки.`;
@@ -24859,10 +24887,14 @@ function ManualTab({ input, onChange, onAdd, added }) {
             {
               type: "number",
               className: "field",
-              value: input.metalPrice,
+              value: input.metalPrice === 0 ? "" : input.metalPrice,
+              placeholder: "0",
               min: 0,
               step: 0.5,
-              onChange: (e) => onChange({ metalPrice: Number(e.target.value) })
+              onChange: (e) => {
+                const v2 = e.target.value;
+                onChange({ metalPrice: v2 === "" ? 0 : Math.max(0, Number(v2)) });
+              }
             }
           )
         ] }),
@@ -86337,10 +86369,6 @@ function App() {
     } catch {
     }
   }, [cart, fileTech, input]);
-  reactExports.useEffect(() => {
-    const mat = MATERIALS.find((m2) => m2.id === input.materialId);
-    if (mat) setInput((s2) => ({ ...s2, metalPrice: mat.price }));
-  }, [input.materialId]);
   const result = reactExports.useMemo(() => calculate(input), [input]);
   const geom = reactExports.useMemo(() => {
     var _a3;
@@ -86528,4 +86556,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DwEBe4Wl.js.map
+//# sourceMappingURL=index-DnPDU3NB.js.map
