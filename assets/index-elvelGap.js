@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CJCN2odk.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DEboyE6e.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -56209,6 +56209,57 @@ function ProfileCanvas({ geom, angles, className }) {
         }
       }
     }
+    let thickDrawn = false;
+    for (let i2 = 0; i2 < polygon.length && !thickDrawn; i2++) {
+      const a2 = polygon[i2];
+      const b2 = polygon[(i2 + 1) % polygon.length];
+      const segLen = Math.hypot(b2.x - a2.x, b2.y - a2.y);
+      if (segLen < 0.5) continue;
+      const mx = (a2.x + b2.x) / 2;
+      const my = (a2.y + b2.y) / 2;
+      const dx = (b2.x - a2.x) / segLen;
+      const dy = (b2.y - a2.y) / segLen;
+      const nx = -dy;
+      const ny = dx;
+      for (const q2 of polygon) {
+        const dpx = q2.x - mx;
+        const dpy = q2.y - my;
+        const dist = Math.hypot(dpx, dpy);
+        if (dist < thickness * 0.6 || dist > thickness * 1.5) continue;
+        const dot = dpx * nx + dpy * ny;
+        if (Math.abs(dot - thickness) > 0.4) continue;
+        const [cx, cy] = P2({ x: mx, y: my });
+        const [qx, qy] = P2(q2);
+        ctx.strokeStyle = "#0f172a";
+        ctx.fillStyle = "#0f172a";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(qx, qy);
+        ctx.stroke();
+        const ang = Math.atan2(qy - cy, qx - cx);
+        const arrowShrink = 6;
+        const ax1 = cx + arrowShrink * Math.cos(ang);
+        const ay1 = cy + arrowShrink * Math.sin(ang);
+        const ax2 = qx - arrowShrink * Math.cos(ang);
+        const ay2 = qy - arrowShrink * Math.sin(ang);
+        arrow(ax1, ay1, ang + Math.PI);
+        arrow(ax2, ay2, ang);
+        const labelX = (cx + qx) / 2 + Math.cos(ang + Math.PI / 2) * 14;
+        const labelY = (cy + qy) / 2 + Math.sin(ang + Math.PI / 2) * 14;
+        ctx.font = "700 11px 'JetBrains Mono', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label = `t=${thickness}`;
+        const tw = ctx.measureText(label).width + 8;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(labelX - tw / 2, labelY - 8, tw, 16);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillText(label, labelX, labelY);
+        thickDrawn = true;
+        break;
+      }
+    }
     if (moldPoints && moldPoints.length > 2) {
       const label = `R${radius} · t${thickness}`;
       ctx.font = mono;
@@ -57115,4 +57166,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-6DlIkM3A.js.map
+//# sourceMappingURL=index-elvelGap.js.map
