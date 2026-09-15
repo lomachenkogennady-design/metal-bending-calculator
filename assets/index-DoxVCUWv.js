@@ -23923,7 +23923,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-hEI57z2y.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CEOSfAE6.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24630,68 +24630,98 @@ E.API.PDFObject = (function() {
     return "" + r;
   }, e;
 })();
+function pruneFree(free) {
+  for (let i2 = free.length - 1; i2 >= 0; i2--) {
+    for (let j2 = 0; j2 < free.length; j2++) {
+      if (i2 === j2) continue;
+      const a2 = free[i2], b2 = free[j2];
+      if (a2.x >= b2.x && a2.y >= b2.y && a2.x + a2.w <= b2.x + b2.w && a2.y + a2.h <= b2.y + b2.h) {
+        free.splice(i2, 1);
+        break;
+      }
+    }
+  }
+}
 function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h) {
   const pieces = [];
   const unplaced = [];
   for (const p2 of parts) {
-    for (let i2 = 0; i2 < p2.qty; i2++) {
-      let w2 = p2.width, h2 = p2.height, rot2 = false;
-      if (h2 > sheetH && w2 <= sheetH) {
-        [w2, h2] = [h2, w2];
-        rot2 = true;
-      }
-      if (w2 > sheetW || h2 > sheetH) {
-        if (!unplaced.find((u2) => u2.id === p2.id)) unplaced.push(p2);
-        continue;
-      }
-      pieces.push({ part: p2, w: w2, h: h2, rot: rot2 });
+    const fitsN = p2.width <= sheetW && p2.height <= sheetH;
+    const fitsR = p2.height <= sheetW && p2.width <= sheetH;
+    if (!fitsN && !fitsR) {
+      if (!unplaced.find((u2) => u2.id === p2.id)) unplaced.push(p2);
+      continue;
     }
+    for (let i2 = 0; i2 < p2.qty; i2++) pieces.push({ part: p2 });
   }
-  pieces.sort((a2, b2) => b2.h - a2.h || b2.w - a2.w);
+  pieces.sort((a2, b2) => {
+    const sa = a2.part.width * a2.part.height;
+    const sb = b2.part.width * b2.part.height;
+    return sb - sa;
+  });
   const sheets = [];
-  const GAP = 2;
-  for (const piece of pieces) {
-    let placed = false;
-    for (const sheet of sheets) {
-      const shelves = [];
-      for (const q2 of sheet.placed) {
-        let s2 = shelves.find((sh) => sh.y === q2.y);
-        if (!s2) {
-          s2 = { y: q2.y, h: q2.h, usedX: 0 };
-          shelves.push(s2);
+  for (const { part } of pieces) {
+    let bestSheet = -1, bestRectIdx = -1, bestRot = false;
+    let bestShort = Infinity, bestLong = Infinity;
+    for (let si = 0; si < sheets.length; si++) {
+      const free = sheets[si].free;
+      for (let ri = 0; ri < free.length; ri++) {
+        const fr2 = free[ri];
+        if (part.width <= fr2.w && part.height <= fr2.h) {
+          const lw = fr2.w - part.width, lh = fr2.h - part.height;
+          const short = Math.min(lw, lh), long = Math.max(lw, lh);
+          if (short < bestShort || short === bestShort && long < bestLong) {
+            bestSheet = si;
+            bestRectIdx = ri;
+            bestRot = false;
+            bestShort = short;
+            bestLong = long;
+          }
         }
-        s2.usedX = Math.max(s2.usedX, q2.x + q2.w + GAP);
-        s2.h = Math.max(s2.h, q2.h);
-      }
-      for (const s2 of shelves) {
-        if (piece.h <= s2.h && s2.usedX + piece.w <= sheetW) {
-          sheet.placed.push({ ...piece.part, x: s2.usedX, y: s2.y, rot: piece.rot, w: piece.w, h: piece.h });
-          sheet.usedArea += piece.w * piece.h;
-          placed = true;
-          break;
+        if (part.height <= fr2.w && part.width <= fr2.h) {
+          const lw = fr2.w - part.height, lh = fr2.h - part.width;
+          const short = Math.min(lw, lh), long = Math.max(lw, lh);
+          if (short < bestShort || short === bestShort && long < bestLong) {
+            bestSheet = si;
+            bestRectIdx = ri;
+            bestRot = true;
+            bestShort = short;
+            bestLong = long;
+          }
         }
-      }
-      if (placed) break;
-      const nextY = sheet.placed.length === 0 ? 0 : Math.max(...sheet.placed.map((q2) => q2.y + q2.h)) + GAP;
-      if (nextY + piece.h <= sheetH && piece.w <= sheetW) {
-        sheet.placed.push({ ...piece.part, x: 0, y: nextY, rot: piece.rot, w: piece.w, h: piece.h });
-        sheet.usedArea += piece.w * piece.h;
-        placed = true;
-        break;
       }
     }
-    if (!placed) {
-      const sheet = { index: sheets.length + 1, placed: [], usedArea: 0 };
-      sheet.placed.push({ ...piece.part, x: 0, y: 0, rot: piece.rot, w: piece.w, h: piece.h });
-      sheet.usedArea = piece.w * piece.h;
-      sheets.push(sheet);
+    if (bestSheet === -1) {
+      sheets.push({ placed: [], free: [{ x: 0, y: 0, w: sheetW, h: sheetH }] });
+      bestSheet = sheets.length - 1;
+      bestRectIdx = 0;
+      bestRot = !(part.width <= sheetW && part.height <= sheetH);
     }
+    const sheet = sheets[bestSheet];
+    const fr = sheet.free[bestRectIdx];
+    const pw = bestRot ? part.height : part.width;
+    const ph = bestRot ? part.width : part.height;
+    const px = fr.x, py = fr.y;
+    sheet.placed.push({ ...part, x: px, y: py, rot: bestRot, w: pw, h: ph });
+    const newFree = [];
+    if (px + pw < fr.x + fr.w) newFree.push({ x: px + pw, y: fr.y, w: fr.x + fr.w - (px + pw), h: fr.h });
+    if (py + ph < fr.y + fr.h) newFree.push({ x: fr.x, y: py + ph, w: fr.w, h: fr.y + fr.h - (py + ph) });
+    if (px > fr.x) newFree.push({ x: fr.x, y: fr.y, w: px - fr.x, h: fr.h });
+    if (py > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: py - fr.y });
+    sheet.free.splice(bestRectIdx, 1);
+    sheet.free.push(...newFree);
+    pruneFree(sheet.free);
   }
-  const totalArea = sheets.length * sheetW * sheetH;
-  const usedArea = sheets.reduce((s2, sh) => s2 + sh.usedArea, 0);
+  const resultSheets = sheets.map((sh, i2) => ({
+    index: i2 + 1,
+    placed: sh.placed,
+    usedArea: sh.placed.reduce((s2, p2) => s2 + p2.w * p2.h, 0)
+  }));
+  const totalArea = resultSheets.length * sheetW * sheetH;
+  const usedArea = resultSheets.reduce((s2, sh) => s2 + sh.usedArea, 0);
   return {
-    sheets,
-    sheetCount: sheets.length,
+    sheets: resultSheets,
+    sheetCount: resultSheets.length,
     utilization: totalArea > 0 ? usedArea / totalArea : 0,
     sheetW,
     sheetH,
@@ -24923,26 +24953,27 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
     const sheetW_draw = (cw - gapX * (sheetsPerRow - 1)) / sheetsPerRow;
     const scaleFactor = sheetW_draw / nest.sheetW;
     const sheetH_draw = nest.sheetH * scaleFactor;
+    const rowHeight = sheetH_draw + gapY;
+    const availableHeight = pageH - 20 - y2;
+    const rowsPerPage = Math.max(1, Math.floor(availableHeight / rowHeight));
+    let currentPageStartY = y2;
     for (let i2 = 0; i2 < nest.sheets.length; i2++) {
       const sh = nest.sheets[i2];
       const col = i2 % sheetsPerRow;
-      if (col === 0 && i2 > 0) {
-        y2 += gapY;
-      }
-      if (y2 + sheetH_draw + 8 > pageH - 20) {
-        pdf.addPage();
-        y2 = 16;
+      const rowOnPage = Math.floor(i2 / sheetsPerRow) % rowsPerPage;
+      if (col === 0 && rowOnPage === 0 && i2 > 0) {
+        const nextRowY = currentPageStartY + 0;
+        if (nextRowY + sheetH_draw + 6 > pageH - 15) {
+          pdf.addPage();
+          currentPageStartY = 16;
+        }
       }
       const sx = mx + col * (sheetW_draw + gapX);
-      const sy = y2;
+      const sy = currentPageStartY + rowOnPage * rowHeight;
       pdf.setFont(FONT, "bold");
       pdf.setFontSize(8);
       pdf.setTextColor(60);
-      pdf.text(
-        `Лист ${sh.index} / ${nest.sheetCount}  (${sh.placed.length} дет.)`,
-        sx,
-        sy - 1.5
-      );
+      pdf.text(`Лист ${sh.index} / ${nest.sheetCount}  (${sh.placed.length} дет.)`, sx, sy - 1.5);
       pdf.setDrawColor(120, 130, 145);
       pdf.setLineWidth(0.3);
       pdf.setFillColor(245, 247, 250);
@@ -24961,8 +24992,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
           pdf.setFont(FONT, "normal");
           pdf.setFontSize(5.5);
           pdf.setTextColor(255, 255, 255);
-          const label = String(part.title || "").slice(0, 12);
-          pdf.text(label, px + pw / 2, py + ph / 2 + 1, {
+          pdf.text(String(part.title || "").slice(0, 12), px + pw / 2, py + ph / 2 + 1, {
             align: "center",
             maxWidth: pw - 2
           });
@@ -24973,9 +25003,11 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       pdf.setTextColor(120, 130, 145);
       pdf.text(`${nest.sheetW} мм`, sx + sheetW_draw / 2, sy + sheetH_draw + 3, { align: "center" });
       pdf.text(`${nest.sheetH}`, sx - 2, sy + sheetH_draw / 2 + 1, { align: "right" });
+      if (col === sheetsPerRow - 1 || i2 === nest.sheets.length - 1) ;
     }
     const totalRows = Math.ceil(nest.sheets.length / sheetsPerRow);
-    y2 += totalRows * (sheetH_draw + gapY) - gapY + 6;
+    const rowsOnFirstPage = Math.min(totalRows, rowsPerPage);
+    y2 = currentPageStartY + rowsOnFirstPage * rowHeight + 6;
     if (nest.sheets.length > 0) {
       const uniqueParts = Array.from(new Map(nestingParts.map((p2) => [p2.id, p2])).values());
       pdf.setFont(FONT, "normal");
@@ -55640,6 +55672,39 @@ function weightFromArea(areaMm2, t2, density) {
 function weightFromSection(areaMm2, lenMm, density) {
   return areaMm2 * lenMm * 1e-9 * density;
 }
+function splitLoopsToParts(loops) {
+  if (!loops || loops.length === 0) return [];
+  const sorted = loops.map((l2, idx) => ({
+    idx,
+    l: l2,
+    area: Math.abs(loopSignedArea(l2)),
+    bbox: bboxOf([l2])
+  })).filter((x2) => x2.area > 0).sort((a2, b2) => b2.area - a2.area);
+  const usedAsHole = /* @__PURE__ */ new Set();
+  const parts = [];
+  for (let i2 = 0; i2 < sorted.length; i2++) {
+    if (usedAsHole.has(i2)) continue;
+    const outer = sorted[i2];
+    const holes = [];
+    for (let j2 = i2 + 1; j2 < sorted.length; j2++) {
+      if (usedAsHole.has(j2)) continue;
+      const testPt = sorted[j2].l[0];
+      if (pointInPolygon(testPt, outer.l)) {
+        holes.push(sorted[j2].l);
+        usedAsHole.add(j2);
+      }
+    }
+    const holesArea = holes.reduce((s2, h2) => s2 + Math.abs(loopSignedArea(h2)), 0);
+    parts.push({
+      outer: outer.l,
+      holes,
+      bbox: outer.bbox,
+      area: Math.max(0, outer.area - holesArea),
+      holesArea
+    });
+  }
+  return parts;
+}
 const workerUrl = "/metal-bending-calculator/assets/pdf.worker.min-FHbmGBN0.mjs";
 GlobalWorkerOptions.workerSrc = workerUrl;
 const idM = () => [1, 0, 0, 1, 0, 0];
@@ -56265,6 +56330,22 @@ function evaluateFile(geom, calibWidthMm, p2) {
     notes
   };
 }
+function evaluateFileParts(geom, calibWidthMm, p2) {
+  const parts = splitLoopsToParts(geom.rawLoops);
+  const effectiveCalib = geom.source === "dxf" ? 0 : calibWidthMm;
+  if (parts.length <= 1) {
+    return [evaluateFile(geom, effectiveCalib, p2)];
+  }
+  return parts.map((part, idx) => {
+    const subLoops = [part.outer, ...part.holes];
+    const subGeom = {
+      ...geom,
+      rawLoops: subLoops,
+      name: `${geom.name} · деталь ${idx + 1}`
+    };
+    return evaluateFile(subGeom, effectiveCalib, p2);
+  });
+}
 function GeoCanvas({ ev }) {
   const ref = reactExports.useRef(null);
   const [tick, setTick] = reactExports.useState(0);
@@ -56524,7 +56605,7 @@ function GeoCard({
   ] });
 }
 let fid = 1;
-function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onAdd, onEvals }) {
+function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onAdd, onAddParts, onEvals }) {
   var _a3, _b2, _c, _d;
   const [busy, setBusy] = reactExports.useState(false);
   const [geoms, setGeoms] = reactExports.useState({});
@@ -56597,6 +56678,19 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
     return map;
   }, [geoms, calib, tech]);
   const list = files.map((f2) => results[f2.id]).filter(Boolean);
+  const partsMap = reactExports.useMemo(() => {
+    const map = {};
+    Object.values(geoms).forEach((g2) => {
+      var _a4;
+      try {
+        map[g2.fileId] = evaluateFileParts(g2, Number((_a4 = calib[g2.fileId]) != null ? _a4 : 0), tech);
+      } catch (e) {
+        console.warn("evaluateFileParts failed:", e);
+        map[g2.fileId] = [];
+      }
+    });
+    return map;
+  }, [geoms, calib, tech]);
   reactExports.useEffect(() => {
     onEvals == null ? void 0 : onEvals(list);
   }, [JSON.stringify(list.map((e) => [e.geom.fileId, e.cost.total, e.weightBatch, e.part.nBends, e.quality]))]);
@@ -56718,14 +56812,12 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "V-матрица, мм" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field",
                 value: tech.vMatrix,
+                onChange: (v2) => onTech({ vMatrix: v2 }),
                 min: 2,
-                step: 0.5,
-                onChange: (e) => onTech({ vMatrix: Number(e.target.value) })
+                step: 0.5
               }
             )
           ] }),
@@ -56740,14 +56832,12 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
               }
             ) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field",
                 value: tech.partLength,
+                onChange: (v2) => onTech({ partLength: v2 }),
                 min: 10,
-                step: 10,
-                onChange: (e) => onTech({ partLength: Number(e.target.value) })
+                step: 10
               }
             )
           ] })
@@ -56756,14 +56846,12 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Количество, шт" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field",
                 value: tech.quantity,
+                onChange: (v2) => onTech({ quantity: v2 }),
                 min: 1,
-                step: 1,
-                onChange: (e) => onTech({ quantity: Number(e.target.value) })
+                step: 1
               }
             )
           ] }),
@@ -56942,8 +57030,13 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
             onTitle: (v2) => setTitles((t2) => ({ ...t2, [ev.geom.fileId]: v2 })),
             added: !!added[ev.geom.fileId],
             onAdd: () => {
-              var _a5;
-              onAdd(ev, (_a5 = titles[ev.geom.fileId]) != null ? _a5 : ev.geom.name, client2);
+              var _a5, _b4, _c2;
+              const fileParts = (_a5 = partsMap[ev.geom.fileId]) != null ? _a5 : [];
+              if (fileParts.length > 1 && onAddParts) {
+                onAddParts(fileParts, (_b4 = titles[ev.geom.fileId]) != null ? _b4 : ev.geom.name, client2);
+              } else {
+                onAdd(ev, (_c2 = titles[ev.geom.fileId]) != null ? _c2 : ev.geom.name, client2);
+              }
               setAdded((a2) => ({ ...a2, [ev.geom.fileId]: true }));
               setTimeout(() => setAdded((a2) => ({ ...a2, [ev.geom.fileId]: false })), 1800);
             },
@@ -58281,6 +58374,29 @@ function App() {
       return (_a3 = document.getElementById("smeta")) == null ? void 0 : _a3.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 250);
   };
+  const addExtractedParts = (evs, title, client2) => {
+    const mat = MATERIALS.find((m2) => m2.id === fileTech.materialId);
+    setCart((c2) => [
+      ...c2,
+      ...evs.map(
+        (ev, idx) => {
+          var _a3;
+          return itemFromExtracted(
+            ev,
+            `${title} · деталь ${idx + 1}`,
+            client2,
+            fileTech.quantity,
+            (_a3 = mat == null ? void 0 : mat.short) != null ? _a3 : "",
+            fileTech.thickness
+          );
+        }
+      )
+    ]);
+    setTimeout(() => {
+      var _a3;
+      return (_a3 = document.getElementById("smeta")) == null ? void 0 : _a3.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+  };
   const reportItems = cart.length ? cart : [itemFromCalc(input, result)];
   const doExport = async () => {
     console.log("[doExport] НАЖАТА кнопка Экспорт PDF");
@@ -58380,6 +58496,7 @@ function App() {
           files,
           onFiles: setFiles,
           onAdd: addExtractedPosition,
+          onAddParts: addExtractedParts,
           client: { name: input.clientName, phone: input.clientPhone, email: input.clientEmail },
           onClient: (c2) => patch({ clientName: c2.name, clientPhone: c2.phone, clientEmail: c2.email }),
           tech: fileTech,
@@ -58462,4 +58579,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DGjdaZT-.js.map
+//# sourceMappingURL=index-DoxVCUWv.js.map
