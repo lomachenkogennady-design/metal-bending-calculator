@@ -12507,7 +12507,22 @@ const MATERIALS = [
   { id: "stainless", name: "Нержавеющая AISI 304 (Rm=620 МПа)", short: "AISI 304", rm: 620, density: 7900, color: 13226716, price: 550 },
   { id: "aluminium", name: "Алюминий АМг2 (Rm=190 МПа)", short: "АМг2", rm: 190, density: 2690, color: 14278115, price: 320 }
 ];
-const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6];
+const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2];
+const WORKSHOP = {
+  laser: {
+    maxThickness: { steel: 5, stainless: 3, aluminium: 3 }
+  },
+  press: {
+    maxWidth: 2490,
+    maxDepth: 280,
+    maxDepthNarrow: 470,
+    maxDepthNarrowWidth: 2e3,
+    minThickness: 0.2,
+    maxThickness: 2,
+    minFlange: 11,
+    minClosedBend: 12
+  }
+};
 const PROFILES = [
   { id: "angle", name: "Уголок", flanges: [50, 50], turns: [1], cs: [[1, 1]] },
   { id: "u", name: "П-образный", flanges: [40, 80, 40], turns: [1, 1], cs: [[1, 1], [1, 1]] },
@@ -12535,12 +12550,13 @@ function minFlange(v2, t2) {
   return Math.ceil(v2 / 2 + t2);
 }
 function calculate(input) {
-  var _a3, _b2;
+  var _a3, _b2, _c, _d;
   const mat = (_a3 = MATERIALS.find((m2) => m2.id === input.materialId)) != null ? _a3 : MATERIALS[0];
   const prof = (_b2 = PROFILES.find((p2) => p2.id === input.profileId)) != null ? _b2 : PROFILES[0];
   const t2 = input.thickness;
   const V2 = input.vMatrix;
-  const R2 = innerRadiusFromV(V2);
+  const method = (_c = input.bendMethod) != null ? _c : "air";
+  const R2 = method === "coining" ? t2 : innerRadiusFromV(V2);
   const K2 = kFactor(R2, t2);
   const warnings = [];
   const nFlanges = prof.flanges.length;
@@ -12574,6 +12590,34 @@ function calculate(input) {
   const forceTon = round1(forceKN / 9.81);
   const recommendedPress = Math.ceil(forceTon * 1.3 / 5) * 5;
   const minFl = minFlange(V2, t2);
+  const W2 = WORKSHOP;
+  if (t2 < W2.press.minThickness) {
+    warnings.push({ level: "warn", text: `Толщина ${t2} мм меньше минимальной для гибки (${W2.press.minThickness} мм).` });
+  }
+  if (t2 > W2.press.maxThickness) {
+    warnings.push({ level: "warn", text: `Гибка ${t2} мм превышает стандартную (${W2.press.maxThickness} мм) — по согласованию.` });
+  }
+  const maxLaser = (_d = W2.laser.maxThickness[mat.id]) != null ? _d : 5;
+  if (t2 > maxLaser) {
+    warnings.push({ level: "error", text: `Лазер ${mat.short}: толщина ${t2} мм превышает предел ${maxLaser} мм.` });
+  }
+  if (input.length > W2.press.maxWidth) {
+    warnings.push({ level: "error", text: `Длина ${input.length} мм превышает макс. ширину гиба ${W2.press.maxWidth} мм.` });
+  }
+  const maxDepth = input.length <= W2.press.maxDepthNarrowWidth ? W2.press.maxDepthNarrow : W2.press.maxDepth;
+  const maxFlange = Math.max(...flanges);
+  if (maxFlange > maxDepth) {
+    warnings.push({ level: "warn", text: `Полка ${maxFlange} мм превышает макс. глубину гиба ${maxDepth} мм при ширине ${input.length} мм.` });
+  }
+  if (flanges.some((f2) => f2 < W2.press.minFlange)) {
+    warnings.push({ level: "warn", text: `Полка меньше мин. высоты фланца ${W2.press.minFlange} мм (V-гибка).` });
+  }
+  if (prof.closed) {
+    const minF = Math.min(...flanges);
+    if (minF < W2.press.minClosedBend) {
+      warnings.push({ level: "warn", text: `Мин. внутренний размер замкнутого гиба ${minF} мм меньше ${W2.press.minClosedBend} мм.` });
+    }
+  }
   const recV = recommendedV(t2);
   flanges.forEach((f2, i2) => {
     if (f2 < minFl) {
@@ -23773,7 +23817,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CZYeUi-6.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-Cd8a4pLW.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24772,6 +24816,7 @@ function NumberField({
   );
 }
 function ManualTab({ input, onChange, onAdd, added }) {
+  var _a3;
   const prof = PROFILES.find((p2) => p2.id === input.profileId);
   const setFlange = (i2, v2) => {
     const flanges = [...input.flanges];
@@ -24783,6 +24828,8 @@ function ManualTab({ input, onChange, onAdd, added }) {
     angles[i2] = Math.max(10, Math.min(170, v2));
     onChange({ angles });
   };
+  const method = (_a3 = input.bendMethod) != null ? _a3 : "air";
+  const displayR = method === "coining" ? input.thickness : innerRadiusFromV(input.vMatrix);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-6 lg:grid-cols-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -24840,7 +24887,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "мм · по ходу контура" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: prof.flanges.map((_2, i2) => {
-          var _a3;
+          var _a4;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-16 flex-1", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-1 text-center font-mono text-[10px] font-bold text-slate-400", children: [
               "П",
@@ -24849,7 +24896,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               NumberField,
               {
-                value: (_a3 = input.flanges[i2]) != null ? _a3 : prof.flanges[i2],
+                value: (_a4 = input.flanges[i2]) != null ? _a4 : prof.flanges[i2],
                 onChange: (v2) => setFlange(i2, v2),
                 min: 5,
                 step: 1,
@@ -24865,7 +24912,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "° · для каждого гиба" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: Array.from({ length: prof.turns.length }).map((_2, i2) => {
-          var _a3;
+          var _a4;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-16 flex-1", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-1 text-center font-mono text-[10px] font-bold text-slate-400", children: [
               "Гиб ",
@@ -24874,7 +24921,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               NumberField,
               {
-                value: (_a3 = input.angles[i2]) != null ? _a3 : 90,
+                value: (_a4 = input.angles[i2]) != null ? _a4 : 90,
                 onChange: (v2) => setAngle(i2, v2),
                 min: 10,
                 max: 170,
@@ -24912,7 +24959,8 @@ function ManualTab({ input, onChange, onAdd, added }) {
               value: input.length,
               onChange: (v2) => onChange({ length: v2 }),
               step: 10,
-              min: 10
+              min: 10,
+              max: 2490
             }
           )
         ] }),
@@ -24925,6 +24973,38 @@ function ManualTab({ input, onChange, onAdd, added }) {
               onChange: (v2) => onChange({ quantity: v2 }),
               step: 1,
               min: 1
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+          "Метод гибки ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "влияет на R и развёртку" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: () => onChange({ bendMethod: "air" }),
+              className: `flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition ${method === "air" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"}`,
+              children: [
+                "Воздушная",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 font-mono text-[10px] opacity-80", children: "R = 0,16·V" })
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: () => onChange({ bendMethod: "coining" }),
+              className: `flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition ${method === "coining" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"}`,
+              children: [
+                "Калибровка",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 font-mono text-[10px] opacity-80", children: "R = t" })
+              ]
             }
           )
         ] })
@@ -24958,14 +25038,18 @@ function ManualTab({ input, onChange, onAdd, added }) {
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Внутр. радиус R, мм" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+            "Внутр. радиус R, мм",
+            " ",
+            method === "coining" && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint font-bold text-amber-600", children: "= t" })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
               type: "text",
               readOnly: true,
               className: "field field-readonly",
-              value: fmt2(innerRadiusFromV(input.vMatrix))
+              value: fmt2(displayR)
             }
           )
         ] })
@@ -56931,6 +57015,7 @@ const DEFAULT_INPUT = {
   angles: [90, 90],
   length: 1e3,
   vMatrix: 16,
+  bendMethod: "air",
   quantity: 64,
   pressTon: 100,
   setupCost: 500,
@@ -57098,7 +57183,7 @@ function App() {
           onEvals: setFileEvals
         }
       ) }, tab),
-      tab === "manual" && /* @__PURE__ */ jsxRuntimeExports.jsx(Results, { input, result, geom }),
+      tab === "manual" && geom && /* @__PURE__ */ jsxRuntimeExports.jsx(Results, { input, result, geom }),
       (cart.length > 0 || fileEvals.length > 0 || result.ok) && /* @__PURE__ */ jsxRuntimeExports.jsx(
         SummaryPanel,
         {
@@ -57172,4 +57257,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DSftNSgP.js.map
+//# sourceMappingURL=index-BXSvgMHi.js.map
