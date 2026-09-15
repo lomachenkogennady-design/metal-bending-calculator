@@ -12510,7 +12510,17 @@ const MATERIALS = [
 const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2];
 const WORKSHOP = {
   laser: {
-    maxThickness: { steel: 5, stainless: 3, aluminium: 3 }
+    maxThickness: { steel: 5, stainless: 3, aluminium: 3 },
+    /** Цены резки ₽/м по материалу и толщине (среднерыночные) */
+    pricePerMeter: {
+      steel: { "1": 15, "2": 25, "3": 40, "4": 55, "5": 75 },
+      stainless: { "1": 30, "2": 50, "3": 75 },
+      aluminium: { "1": 35, "2": 55, "3": 80 }
+    },
+    /** Стоимость одной врезки (прошивки), ₽ */
+    piercePrice: 8,
+    /** Минимальная стоимость резки за деталь, ₽ */
+    minCostPerPart: 50
   },
   press: {
     maxWidth: 2490,
@@ -12549,8 +12559,17 @@ function innerRadiusFromV(v2) {
 function minFlange(v2, t2) {
   return Math.ceil(v2 / 2 + t2);
 }
+function calcLaserCost(materialId, thickness, cutLengthMm, pierceCount, pricePerMeter, piercePrice) {
+  var _a3, _b2;
+  const lengthM = cutLengthMm / 1e3;
+  const usedPrice = pricePerMeter > 0 ? pricePerMeter : (_b2 = (_a3 = WORKSHOP.laser.pricePerMeter[materialId]) == null ? void 0 : _a3[String(Math.round(thickness))]) != null ? _b2 : 40;
+  const pierce = WORKSHOP.laser.piercePrice;
+  let cost = lengthM * usedPrice + pierceCount * pierce;
+  if (cost < WORKSHOP.laser.minCostPerPart) cost = WORKSHOP.laser.minCostPerPart;
+  return { lengthM, pierceCount, cost: Math.round(cost * 100) / 100, usedPrice };
+}
 function calculate(input) {
-  var _a3, _b2, _c, _d;
+  var _a3, _b2, _c, _d, _e2, _f, _g;
   const mat = (_a3 = MATERIALS.find((m2) => m2.id === input.materialId)) != null ? _a3 : MATERIALS[0];
   const prof = (_b2 = PROFILES.find((p2) => p2.id === input.profileId)) != null ? _b2 : PROFILES[0];
   const t2 = input.thickness;
@@ -12659,10 +12678,15 @@ function calculate(input) {
   if (angles.some((a2) => a2 !== 90)) {
     warnings.push({ level: "info", text: "Ненормированные углы: для точного развёртывания заказывайте пробную гибку (тестовый образец)." });
   }
+  const cutLengthMm = input.cutLengthMm && input.cutLengthMm > 0 ? input.cutLengthMm : input.length * 2 + flat * 2;
+  const laserEnabled = (_e2 = input.laserEnabled) != null ? _e2 : false;
+  const laserPierceCount = (_f = input.laserPierceCount) != null ? _f : 0;
+  const laserCalc = laserEnabled ? calcLaserCost(mat.id, t2, cutLengthMm, laserPierceCount, (_g = input.laserPrice) != null ? _g : 0) : { lengthM: 0, pierceCount: 0, cost: 0 };
+  const laser = round2(laserCalc.cost * input.quantity);
   const metal = round2(weightBatch * input.metalPrice * WASTE_FACTOR);
   const bending = round2(nBends * (input.length / 1e3) * input.pricePerMeter * input.quantity);
   const setup = round2(input.setupCost);
-  const subtotal = round2(metal + bending + setup);
+  const subtotal = round2(metal + bending + setup + laser);
   const vat = round2(subtotal * VAT_RATE);
   const total = round2(subtotal + vat);
   return {
@@ -12681,20 +12705,40 @@ function calculate(input) {
     minFlange: minFl,
     recommendedV: recV,
     nBends,
-    cost: { metal, bending, setup, subtotal, vat, total },
+    cost: {
+      metal,
+      bending,
+      setup,
+      laser,
+      laserLengthM: round2(laserCalc.lengthM * input.quantity),
+      laserPierceCount: laserCalc.pierceCount * input.quantity,
+      subtotal,
+      vat,
+      total
+    },
     warnings
   };
 }
 const clamp = (v2, a2, b2) => Math.min(b2, Math.max(a2, v2));
 const round1 = (v2) => Math.round(v2 * 10) / 10;
 const round2 = (v2) => Math.round(v2 * 100) / 100;
-const nf0$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const nf0$2 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf1$2 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
-const nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nf2$1 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt = (v2) => nf1$2.format(v2);
-const fmt0$1 = (v2) => nf0$1.format(v2);
-const fmt2 = (v2) => nf2.format(v2);
-const fmtMoney = (v2) => nf0$1.format(Math.round(v2)) + " ₽";
+const fmt0$2 = (v2) => nf0$2.format(v2);
+const fmt2$1 = (v2) => nf2$1.format(v2);
+const fmtMoney = (v2) => nf0$2.format(Math.round(v2)) + " ₽";
+function polygonLength(polygon) {
+  if (!polygon || polygon.length < 2) return 0;
+  let len = 0;
+  for (let i2 = 0; i2 < polygon.length; i2++) {
+    const a2 = polygon[i2];
+    const b2 = polygon[(i2 + 1) % polygon.length];
+    len += Math.hypot(b2.x - a2.x, b2.y - a2.y);
+  }
+  return Math.round(len * 100) / 100;
+}
 const left = (d2) => ({ x: -d2.y, y: d2.x });
 const add = (a2, b2) => ({ x: a2.x + b2.x, y: a2.y + b2.y });
 const mul$1 = (a2, s2) => ({ x: a2.x * s2, y: a2.y * s2 });
@@ -12884,6 +12928,9 @@ function itemFromCalc(input, result) {
     metal: result.cost.metal,
     bending: result.cost.bending,
     setup: result.cost.setup,
+    laser: result.cost.laser,
+    laserLengthM: result.cost.laserLengthM,
+    laserPierceCount: result.cost.laserPierceCount,
     subtotal: result.cost.subtotal,
     vat: result.cost.vat,
     total: result.cost.total,
@@ -12925,12 +12972,16 @@ function cartTotals(items) {
     metal: items.reduce((s2, i2) => s2 + i2.metal, 0),
     bending: items.reduce((s2, i2) => s2 + i2.bending, 0),
     setup: items.reduce((s2, i2) => s2 + i2.setup, 0),
+    laser: items.reduce((s2, i2) => {
+      var _a3;
+      return s2 + ((_a3 = i2.laser) != null ? _a3 : 0);
+    }, 0),
     subtotal,
     vat,
     total: subtotal + vat
   };
 }
-const fmtMoney0 = (v2) => fmt0$1(Math.round(v2)) + " ₽";
+const fmtMoney0 = (v2) => fmt0$2(Math.round(v2)) + " ₽";
 function buildSummary(opts) {
   var _a3, _b2, _c, _d, _e2, _f, _g, _h, _i, _j, _k, _l, _m;
   const manualPositions = [];
@@ -23817,7 +23868,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DmL_PEBl.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-COsNSr5V.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24526,9 +24577,9 @@ E.API.PDFObject = (function() {
 })();
 const robotoRegularUrl = "/metal-bending-calculator/assets/Roboto-Regular-DPspvn0D.ttf";
 const robotoBoldUrl = "/metal-bending-calculator/assets/Roboto-Bold-BtpdIk24.ttf";
-const nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const nf0$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 const nf1$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
-const fmt0 = (v2) => nf0.format(v2);
+const fmt0$1 = (v2) => nf0$1.format(v2);
 const fmt1 = (v2) => nf1$1.format(v2);
 async function loadFontAsBase64(url) {
   const buf = await fetch(url).then((r) => r.arrayBuffer());
@@ -24613,15 +24664,15 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       case "bnd":
         return it2.bends != null ? String(it2.bends) : "—";
       case "fl":
-        return it2.flat ? fmt0(it2.flat) : "—";
+        return it2.flat ? fmt0$1(it2.flat) : "—";
       case "len":
-        return it2.length ? fmt0(it2.length) : "—";
+        return it2.length ? fmt0$1(it2.length) : "—";
       case "qty":
-        return fmt0(it2.qty);
+        return fmt0$1(it2.qty);
       case "wt":
         return fmt1(it2.weightBatch);
       case "tot":
-        return fmt0(it2.total);
+        return fmt0$1(it2.total);
       default:
         return "";
     }
@@ -24679,13 +24730,13 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.rect(mx, y2, cw, rowH, "F");
   pdf.text("ИТОГО:", mx + cw - 60, y2 + 4.8, { align: "right" });
   pdf.text(`${fmt1(tot.weight)} кг`, mx + 60, y2 + 4.8, { align: "right" });
-  pdf.text(`${fmt0(tot.total)} ₽`, mx + cw - 2, y2 + 4.8, { align: "right" });
+  pdf.text(`${fmt0$1(tot.total)} ₽`, mx + cw - 2, y2 + 4.8, { align: "right" });
   pdf.setTextColor(0);
   y2 += rowH + 8;
   pdf.setFont(FONT, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(90);
-  const cond = `Условия: цены указаны на дату расчёта и не являются публичной офертой. Стоимость металла включает отходы раскроя 7 %. Наладка инструмента — ${fmt0(tot.setup)} ₽ (при партии от 10 шт. — бесплатно). Срок изготовления: от 3 рабочих дней. Расчёт развёртки выполнен по методике DIN 6935 (K-фактор), усилие гибки — по формуле воздушной гибки.`;
+  const cond = `Условия: цены указаны на дату расчёта и не являются публичной офертой. Стоимость металла включает отходы раскроя 7 %. Наладка инструмента — ${fmt0$1(tot.setup)} ₽ (при партии от 10 шт. — бесплатно). Срок изготовления: от 3 рабочих дней. Расчёт развёртки выполнен по методике DIN 6935 (K-фактор), усилие гибки — по формуле воздушной гибки.`;
   const condLines = pdf.splitTextToSize(cond, cw);
   pdf.text(condLines, mx, y2);
   y2 += condLines.length * 4 + 6;
@@ -24695,6 +24746,341 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.text("г. Санкт-Петербург, 5-й Верхний пер., 19Д", mx, y2 + 4);
   pdf.text("+7 (921) 863-56-50 · san@fire-prom.ru · www.fire-prom.ru", mx, y2 + 8);
   pdf.text(`Менеджер: ________________     Дата: ${dateStr}`, pageW - mx, y2 + 8, { align: "right" });
+  const blob = pdf.output("blob");
+  const url = URL.createObjectURL(blob);
+  const a2 = document.createElement("a");
+  a2.href = url;
+  a2.download = filename;
+  document.body.appendChild(a2);
+  a2.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a2);
+  }, 1500);
+}
+const REQUISITES = {
+  company: {
+    fullName: "ООО «ФАЙЕРПРОМ»",
+    legalAddress: "197342, Город Санкт-Петербург, вн.тер. г. Муниципальный Округ Ланское, наб. Чёрной Речки, дом 47, строение 1, помещение 4-Н, часть 349.1",
+    inn: "7814643719",
+    kpp: "781401001"
+  },
+  bank: {
+    name: "СЕВЕРО-ЗАПАДНЫЙ БАНК ПАО СБЕРБАНК Г. САНКТ-ПЕТЕРБУРГ",
+    bik: "044030653",
+    account: "40702810755070004215",
+    corrAccount: "30101810500000000653"
+  },
+  sign: {
+    director: "Первухин Д. А.",
+    accountant: "Первухин Д. А."
+  },
+  vat: 0.22
+};
+function sumInWords(amount) {
+  const rub = Math.floor(amount);
+  const kop = Math.round((amount - rub) * 100);
+  const units = [
+    "",
+    "один",
+    "два",
+    "три",
+    "четыре",
+    "пять",
+    "шесть",
+    "семь",
+    "восемь",
+    "девять",
+    "десять",
+    "одиннадцать",
+    "двенадцать",
+    "тринадцать",
+    "четырнадцать",
+    "пятнадцать",
+    "шестнадцать",
+    "семнадцать",
+    "восемнадцать",
+    "девятнадцать"
+  ];
+  const tens = [
+    "",
+    "",
+    "двадцать",
+    "тридцать",
+    "сорок",
+    "пятьдесят",
+    "шестьдесят",
+    "семьдесят",
+    "восемьдесят",
+    "девяносто"
+  ];
+  const hundreds = [
+    "",
+    "сто",
+    "двести",
+    "триста",
+    "четыреста",
+    "пятьсот",
+    "шестьсот",
+    "семьсот",
+    "восемьсот",
+    "девятьсот"
+  ];
+  const tri = (n, fem = false) => {
+    const h2 = Math.floor(n / 100);
+    const t2 = Math.floor(n % 100 / 10);
+    const u2 = n % 10;
+    const parts2 = [];
+    if (hundreds[h2]) parts2.push(hundreds[h2]);
+    if (t2 === 1) {
+      const idx = 10 + u2;
+      parts2.push(fem ? idx === 11 ? "одиннадцать" : idx === 12 ? "двенадцать" : units[idx] : units[idx]);
+    } else {
+      if (tens[t2]) parts2.push(tens[t2]);
+      if (u2) parts2.push(fem && u2 === 1 ? "одна" : fem && u2 === 2 ? "две" : units[u2]);
+    }
+    return parts2.join(" ");
+  };
+  const plural = (n, one, few, many) => {
+    const lastTwo = n % 100;
+    const last = n % 10;
+    if (lastTwo >= 11 && lastTwo <= 14) return many;
+    if (last === 1) return one;
+    if (last >= 2 && last <= 4) return few;
+    return many;
+  };
+  const billions = Math.floor(rub / 1e9);
+  const millions = Math.floor(rub % 1e9 / 1e6);
+  const thousands = Math.floor(rub % 1e6 / 1e3);
+  const rest = rub % 1e3;
+  const parts = [];
+  if (billions) {
+    parts.push(tri(billions));
+    parts.push(plural(billions, "миллиард", "миллиарда", "миллиардов"));
+  }
+  if (millions) {
+    parts.push(tri(millions));
+    parts.push(plural(millions, "миллион", "миллиона", "миллионов"));
+  }
+  if (thousands) {
+    parts.push(tri(thousands, true));
+    parts.push(plural(thousands, "тысяча", "тысячи", "тысяч"));
+  }
+  if (rest || parts.length === 0) {
+    parts.push(tri(rest));
+  }
+  let out = parts.join(" ").trim();
+  if (!out) out = "ноль";
+  out = out.charAt(0).toUpperCase() + out.slice(1);
+  const rubWord = plural(rub, "рубль", "рубля", "рублей");
+  const kopWord = plural(kop, "копейка", "копейки", "копеек");
+  const kopStr = String(kop).padStart(2, "0");
+  return `${out} ${rubWord} ${kopStr} ${kopWord}`;
+}
+const nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt0 = (v2) => nf0.format(v2);
+const fmt2 = (v2) => nf2.format(v2);
+async function loadFontBase64(url) {
+  const buf = await fetch(url).then((r) => r.arrayBuffer());
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const CH = 32768;
+  for (let i2 = 0; i2 < bytes.length; i2 += CH) {
+    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i2, i2 + CH)));
+  }
+  return btoa(bin);
+}
+async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__PURE__ */ new Date()) {
+  var _a3, _b2;
+  const R2 = REQUISITES;
+  const tot = cartTotals(items);
+  const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
+  const pdf = new E("p", "mm", "a4");
+  const [reg, bold] = await Promise.all([
+    loadFontBase64(robotoRegularUrl),
+    loadFontBase64(robotoBoldUrl)
+  ]);
+  pdf.addFileToVFS("Roboto-Regular.ttf", reg);
+  pdf.addFileToVFS("Roboto-Bold.ttf", bold);
+  pdf.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+  pdf.addFont("Roboto-Bold.ttf", "Roboto", "bold");
+  const F2 = "Roboto";
+  const pageW = 210;
+  const mx = 12, cw = pageW - mx * 2;
+  let y2 = 14;
+  const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(8.5);
+  pdf.text(R2.bank.name, mx, y2);
+  pdf.text("БИК", pageW - mx - 50, y2);
+  pdf.text(R2.bank.bik, pageW - mx, y2, { align: "right" });
+  y2 += 4;
+  pdf.text("Банк получателя", mx, y2);
+  pdf.text("Сч. №", pageW - mx - 50, y2);
+  pdf.text(R2.bank.corrAccount, pageW - mx, y2, { align: "right" });
+  y2 += 4;
+  const boxH = 22;
+  const boxY = y2;
+  const colSplit = mx + 125;
+  pdf.setDrawColor(0);
+  pdf.setLineWidth(0.3);
+  pdf.rect(mx, boxY, cw, boxH);
+  pdf.line(colSplit, boxY, colSplit, boxY + boxH);
+  pdf.line(colSplit, boxY + 7.33, pageW - mx, boxY + 7.33);
+  pdf.line(colSplit, boxY + 14.66, pageW - mx, boxY + 14.66);
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(7.5);
+  pdf.text("Получатель", mx + 1.5, boxY + 3.5);
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(10);
+  pdf.text(R2.company.fullName, mx + 1.5, boxY + 10);
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(7);
+  pdf.text(R2.company.legalAddress, mx + 1.5, boxY + 14.5, {
+    maxWidth: colSplit - mx - 3
+  });
+  const labelX = colSplit + 2;
+  const valueX = pageW - mx - 2;
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(7.5);
+  pdf.text("ИНН", labelX, boxY + 4);
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(9.5);
+  pdf.text(R2.company.inn, valueX, boxY + 4, { align: "right" });
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(7.5);
+  pdf.text("КПП", labelX, boxY + 11);
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(9.5);
+  pdf.text(R2.company.kpp, valueX, boxY + 11, { align: "right" });
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(7.5);
+  pdf.text("Сч. №", labelX, boxY + 18);
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(9.5);
+  pdf.text(R2.bank.account, valueX, boxY + 18, { align: "right" });
+  y2 = boxY + boxH + 8;
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(14);
+  pdf.text(`Счёт на оплату № ${invoiceNumber} от ${dateStr}`, mx, y2);
+  y2 += 6;
+  pdf.setDrawColor(0);
+  pdf.setLineWidth(0.5);
+  pdf.line(mx, y2, pageW - mx, y2);
+  y2 += 6;
+  pdf.setFontSize(9.5);
+  pdf.setFont(F2, "bold");
+  pdf.text("Поставщик (Исполнитель):", mx, y2);
+  pdf.setFont(F2, "normal");
+  pdf.text(`${R2.company.fullName}, ${R2.company.legalAddress}`, mx + 60, y2, { maxWidth: cw - 60 });
+  y2 += 10;
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(9.5);
+  pdf.text("Покупатель (Заказчик):", mx, y2);
+  pdf.setFont(F2, "normal");
+  const clientLine = client2.name ? `${client2.name}${client2.phone ? " · " + client2.phone : ""}${client2.email ? " · " + client2.email : ""}` : "—";
+  pdf.text(clientLine, mx + 60, y2, { maxWidth: cw - 60 });
+  y2 += 6;
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(9);
+  pdf.text("Основание:", mx, y2);
+  pdf.text("устная заявка покупателя", mx + 60, y2);
+  y2 += 6;
+  const cols = [
+    { key: "n", label: "№", w: 8, align: "center" },
+    { key: "name", label: "Товары (работы, услуги)", w: 78, align: "left" },
+    { key: "qty", label: "Кол-во", w: 14, align: "right" },
+    { key: "unit", label: "Ед.", w: 10, align: "center" },
+    { key: "price", label: "Цена", w: 22, align: "right" },
+    { key: "sum", label: "Сумма", w: cw - 8 - 78 - 14 - 10 - 22, align: "right" }
+  ];
+  const rowH = 7;
+  const drawHeader = () => {
+    pdf.setFillColor(238, 242, 247);
+    pdf.rect(mx, y2, cw, rowH, "F");
+    pdf.setFont(F2, "bold");
+    pdf.setFontSize(8.5);
+    let x2 = mx;
+    cols.forEach((c2) => {
+      const tx = c2.align === "right" ? x2 + c2.w - 1.5 : c2.align === "center" ? x2 + c2.w / 2 : x2 + 1.5;
+      pdf.text(c2.label, tx, y2 + 4.8, { align: c2.align });
+      x2 += c2.w;
+    });
+    pdf.setDrawColor(150, 160, 175);
+    pdf.setLineWidth(0.25);
+    pdf.rect(mx, y2, cw, rowH);
+    let vx = mx;
+    cols.forEach((c2) => {
+      pdf.line(vx, y2, vx, y2 + rowH);
+      vx += c2.w;
+    });
+    pdf.line(vx, y2, vx, y2 + rowH);
+    y2 += rowH;
+    pdf.setFont(F2, "normal");
+    pdf.setFontSize(9);
+  };
+  drawHeader();
+  items.forEach((it2, i2) => {
+    const price = it2.qty > 0 ? it2.subtotal / it2.qty : 0;
+    const rowData = [
+      String(i2 + 1),
+      it2.title + (it2.profile ? ` · ${it2.profile}` : "") + (it2.note ? ` · ${it2.note}` : ""),
+      fmt0(it2.qty),
+      "шт.",
+      fmt2(price),
+      fmt2(it2.subtotal)
+    ];
+    let x2 = mx;
+    cols.forEach((c2, ci) => {
+      const txt = rowData[ci];
+      const tx = c2.align === "right" ? x2 + c2.w - 1.5 : c2.align === "center" ? x2 + c2.w / 2 : x2 + 1.5;
+      pdf.text(txt, tx, y2 + 4.8, { align: c2.align, maxWidth: c2.w - 3 });
+      x2 += c2.w;
+    });
+    pdf.setDrawColor(226, 232, 240);
+    pdf.line(mx, y2 + rowH, mx + cw, y2 + rowH);
+    y2 += rowH;
+  });
+  y2 += 2;
+  const totalQty = items.reduce((s2, it2) => s2 + it2.qty, 0);
+  const rowItogo = (label, value, boldText = false) => {
+    pdf.setFont(F2, boldText ? "bold" : "normal");
+    pdf.setFontSize(10);
+    pdf.text(label, pageW - mx - 60, y2, { align: "right" });
+    pdf.text(value, pageW - mx, y2, { align: "right" });
+    y2 += 5;
+  };
+  pdf.setFont(F2, "bold");
+  pdf.setFontSize(9);
+  pdf.text(`${fmt0(totalQty)}`, mx + cols[0].w + cols[1].w + cols[2].w - 2, y2 - 3, { align: "right" });
+  rowItogo("Итого:", fmt2(tot.subtotal));
+  rowItogo(`В том числе НДС ${Math.round(R2.vat * 100)}%:`, fmt2(tot.vat));
+  rowItogo("Всего к оплате:", fmt2(tot.total), true);
+  y2 += 4;
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(9);
+  pdf.text(`Всего наименований ${items.length}, на сумму ${fmt2(tot.total)} руб.`, mx, y2);
+  y2 += 5;
+  pdf.setFont(F2, "bold");
+  pdf.text(sumInWords(tot.total), mx, y2, { maxWidth: cw });
+  y2 += 8;
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(80);
+  const terms = "Оплата данного счёта означает согласие с условиями поставки товара. Уведомление об оплате обязательно, в противном случае не гарантируется наличие товара на складе. Товар отпускается по факту прихода денег на р/с Поставщика, самовывозом, при наличии доверенности и паспорта.";
+  const lines = pdf.splitTextToSize(terms, cw);
+  pdf.text(lines, mx, y2);
+  y2 += lines.length * 3.5 + 6;
+  pdf.setTextColor(0);
+  pdf.setFont(F2, "normal");
+  pdf.setFontSize(9);
+  pdf.text("Руководитель", mx, y2);
+  pdf.text(R2.sign.director, mx + 40, y2);
+  pdf.line(mx + 38, y2 + 1, mx + 100, y2 + 1);
+  pdf.text("Бухгалтер", pageW - mx - 80, y2);
+  pdf.text(R2.sign.accountant, pageW - mx - 40, y2);
+  pdf.line(pageW - mx - 42, y2 + 1, pageW - mx, y2 + 1);
   const blob = pdf.output("blob");
   const url = URL.createObjectURL(blob);
   const a2 = document.createElement("a");
@@ -24816,7 +25202,7 @@ function NumberField({
   );
 }
 function ManualTab({ input, onChange, onAdd, added }) {
-  var _a3;
+  var _a3, _b2, _c, _d;
   const prof = PROFILES.find((p2) => p2.id === input.profileId);
   const setFlange = (i2, v2) => {
     const flanges = [...input.flanges];
@@ -25049,7 +25435,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
               type: "text",
               readOnly: true,
               className: "field field-readonly",
-              value: fmt2(displayR)
+              value: fmt2$1(displayR)
             }
           )
         ] })
@@ -25103,6 +25489,56 @@ function ManualTab({ input, onChange, onAdd, added }) {
               min: 0
             }
           )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-200 bg-amber-50/50 p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 flex items-center justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-[12px] font-bold text-slate-700", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "checkbox",
+                checked: (_b2 = input.laserEnabled) != null ? _b2 : false,
+                onChange: (e) => onChange({ laserEnabled: e.target.checked }),
+                className: "h-4 w-4 accent-amber-600"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "🔦 Лазерная резка" })
+          ] }),
+          input.laserEnabled && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-800", children: "включена" })
+        ] }),
+        input.laserEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+              "Цена, ₽/м ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint ml-1 font-normal", children: "(0 = авто)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                value: (_c = input.laserPrice) != null ? _c : 0,
+                onChange: (v2) => onChange({ laserPrice: v2 }),
+                min: 0,
+                step: 5,
+                placeholder: "авто"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+              "Врезок, шт ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint ml-1 font-normal", children: "на деталь" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              NumberField,
+              {
+                value: (_d = input.laserPierceCount) != null ? _d : 0,
+                onChange: (v2) => onChange({ laserPierceCount: v2 }),
+                min: 0,
+                step: 1
+              }
+            )
+          ] })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-slate-50/70 p-4", children: [
@@ -56560,7 +56996,7 @@ function Results({ input, result, geom }) {
             "t=",
             input.thickness,
             " мм · K=",
-            fmt2(result.kFactor)
+            fmt2$1(result.kFactor)
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-56 rounded-lg border border-slate-200 bg-white", children: result.ok && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -56577,11 +57013,11 @@ function Results({ input, result, geom }) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Длина развёртки", value: fmt(result.flat), unit: "мм", sub: `DIN 6935 · K=${fmt2(result.kFactor)}`, accent: true }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Усилие гибки", value: fmt(result.forceTon), unit: "т", sub: `${fmt0$1(result.forceKN)} кН · 1.33·Rm·t²·L/V` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "V-матрица", value: fmt(input.vMatrix), unit: "мм", sub: `R внутр. = ${fmt2(result.innerRadius)} мм`, accent: true }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес детали", value: fmt2(result.weightPiece), unit: "кг", sub: `${mat.short} · ${mat.density} кг/м³` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес партии", value: fmt(result.weightBatch), unit: "кг", sub: `${fmt0$1(input.quantity)} шт × ${fmt2(result.weightPiece)} кг` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Длина развёртки", value: fmt(result.flat), unit: "мм", sub: `DIN 6935 · K=${fmt2$1(result.kFactor)}`, accent: true }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Усилие гибки", value: fmt(result.forceTon), unit: "т", sub: `${fmt0$2(result.forceKN)} кН · 1.33·Rm·t²·L/V` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "V-матрица", value: fmt(input.vMatrix), unit: "мм", sub: `R внутр. = ${fmt2$1(result.innerRadius)} мм`, accent: true }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес детали", value: fmt2$1(result.weightPiece), unit: "кг", sub: `${mat.short} · ${mat.density} кг/м³` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес партии", value: fmt(result.weightBatch), unit: "кг", sub: `${fmt0$2(input.quantity)} шт × ${fmt2$1(result.weightPiece)} кг` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Гибов", value: String(result.nBends), sub: `углы ${input.angles.slice(0, result.nBends).map((a2) => a2 + "°").join(" / ")}` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Мин. полка", value: String(result.minFlange), unit: "мм", sub: `для V=${fmt(input.vMatrix)} мм` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Рекоменд. пресс", value: fmt(result.recommendedPress), unit: "т", sub: `задан: ${input.pressTon} т` })
@@ -56596,12 +57032,12 @@ function Results({ input, result, geom }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 py-4", children: [
           {
             name: `Металл (${mat.short})`,
-            note: `${fmt(result.weightBatch)} кг × ${fmt0$1(input.metalPrice)} ₽/кг · отходы ${Math.round((WASTE_FACTOR - 1) * 100)} %`,
+            note: `${fmt(result.weightBatch)} кг × ${fmt0$2(input.metalPrice)} ₽/кг · отходы ${Math.round((WASTE_FACTOR - 1) * 100)} %`,
             val: result.cost.metal
           },
           {
             name: "Гибка",
-            note: `${result.nBends} гиба × ${fmt(input.length / 1e3)} м × ${fmt0$1(input.pricePerMeter)} ₽/м × ${fmt0$1(input.quantity)} шт`,
+            note: `${result.nBends} гиба × ${fmt(input.length / 1e3)} м × ${fmt0$2(input.pricePerMeter)} ₽/м × ${fmt0$2(input.quantity)} шт`,
             val: result.cost.bending
           },
           { name: "Наладка инструмента", note: "единовременно на партию", val: result.cost.setup }
@@ -56643,7 +57079,7 @@ const SRC_STYLE = {
 };
 function PosRow({ p: p2 }) {
   var _a3;
-  const dims = [p2.flatMm ? `разв. ${fmt0$1(p2.flatMm)}` : null, p2.lengthMm ? `L ${fmt0$1(p2.lengthMm)}` : null].filter(Boolean).join(" · ");
+  const dims = [p2.flatMm ? `разв. ${fmt0$2(p2.flatMm)}` : null, p2.lengthMm ? `L ${fmt0$2(p2.lengthMm)}` : null].filter(Boolean).join(" · ");
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 border-b border-slate-100 px-3 py-2 last:border-0", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 rounded-full px-2 py-0.5 text-[9.5px] font-bold tracking-wide uppercase ${(_a3 = SRC_STYLE[p2.sourceLabel]) != null ? _a3 : SRC_STYLE.смета}`, children: p2.sourceLabel }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
@@ -56655,7 +57091,7 @@ function PosRow({ p: p2 }) {
       " гиб."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "hidden font-mono text-[11px] font-bold text-slate-500 sm:block", children: [
-      fmt0$1(p2.qty),
+      fmt0$2(p2.qty),
       " шт"
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "hidden font-mono text-[11px] font-bold text-slate-500 sm:block", children: [
@@ -56708,7 +57144,7 @@ function SummaryPanel({ summary }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase", children: "Итого по всем данным" }),
           [
             { l: "Позиций", v: String(summary.positions.length) },
-            { l: "Штук в партии", v: fmt0$1(t2.qty) },
+            { l: "Штук в партии", v: fmt0$2(t2.qty) },
             { l: "Вес металла", v: `${fmt(t2.weightKg)} кг` },
             { l: "Без НДС", v: fmtMoney(t2.subtotal) },
             { l: `НДС ${Math.round(VAT_RATE * 100)} %`, v: fmtMoney(t2.vat) }
@@ -56725,7 +57161,8 @@ function SummaryPanel({ summary }) {
     ] })
   ] });
 }
-function CartTable({ items, onRemove, onClear, onExportPdf, onPrint, exporting }) {
+function CartTable({ items, onRemove, onClear, onExportPdf, onExportInvoice, onPrint, exporting }) {
+  var _a3;
   const tot = cartTotals(items);
   if (items.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-6 py-10 text-center", children: [
@@ -56748,6 +57185,7 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onPrint, exporting }
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Вес, кг" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Металл" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Гибка" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase whitespace-nowrap", children: "Резка" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Без НДС" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { className: "border-b border-slate-200 px-3 py-2.5", children: [
           "НДС ",
@@ -56759,7 +57197,7 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onPrint, exporting }
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("tbody", { children: [
         items.map((it2, i2) => {
-          var _a3;
+          var _a4, _b2;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "transition hover:bg-amber-50/40", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono text-slate-400", children: i2 + 1 }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "max-w-44 border-b border-slate-100 px-3 py-2.5", children: [
@@ -56768,13 +57206,14 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onPrint, exporting }
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 whitespace-nowrap", children: it2.material }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.thickness ? `${fmt(it2.thickness)}` : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: (_a3 = it2.bends) != null ? _a3 : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.flat ? `${fmt0$1(it2.flat)}` : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.length ? `${fmt0$1(it2.length)}` : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: fmt0$1(it2.qty) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: (_a4 = it2.bends) != null ? _a4 : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.flat ? `${fmt0$2(it2.flat)}` : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.length ? `${fmt0$2(it2.length)}` : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: fmt0$2(it2.qty) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: fmt(it2.weightBatch) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap", children: fmtMoney0(it2.metal) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap", children: fmtMoney0(it2.bending) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap text-slate-500", children: ((_b2 = it2.laser) != null ? _b2 : 0) > 0 ? fmtMoney0(it2.laser) : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap", children: fmtMoney0(it2.subtotal) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap", children: fmtMoney0(it2.vat) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono font-bold whitespace-nowrap text-slate-900", children: fmtMoney0(it2.total) }),
@@ -56794,6 +57233,7 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onPrint, exporting }
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold", children: fmt(tot.weight) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: fmtMoney0(tot.metal) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: fmtMoney0(tot.bending) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: ((_a3 = tot.laser) != null ? _a3 : 0) > 0 ? fmtMoney0(tot.laser) : "—" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: fmtMoney0(tot.subtotal) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: fmtMoney0(tot.vat) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono text-base font-black whitespace-nowrap text-amber-400", children: fmtMoney0(tot.total) }),
@@ -56809,6 +57249,15 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onPrint, exporting }
           disabled: exporting,
           className: "rounded-xl bg-slate-900 px-5 py-3 text-[14px] font-bold text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800 active:scale-[0.99] disabled:opacity-60",
           children: exporting ? "Готовим PDF…" : "⬇ Скачать смету (PDF)"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: onExportInvoice,
+          disabled: exporting,
+          className: "rounded-xl bg-amber-600 px-5 py-3 text-[14px] font-bold text-white shadow-lg shadow-amber-600/25 transition hover:bg-amber-700 active:scale-[0.99] disabled:opacity-60",
+          children: "🧾 Скачать счёт (PDF)"
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -56848,7 +57297,7 @@ const th = {
   letterSpacing: 0.4
 };
 function ReportPrint({ items, date }) {
-  var _a3, _b2;
+  var _a3, _b2, _c;
   const tot = cartTotals(items);
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
@@ -56908,6 +57357,7 @@ function ReportPrint({ items, date }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Вес, кг" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Металл" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Гибка" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Резка" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Без НДС" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("th", { style: th, children: [
           "НДС ",
@@ -56918,7 +57368,7 @@ function ReportPrint({ items, date }) {
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("tbody", { children: [
         items.map((it2, i2) => {
-          var _a4;
+          var _a4, _b3;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: i2 + 1 }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: { ...td, whiteSpace: "normal", minWidth: 140 }, children: [
@@ -56933,28 +57383,29 @@ function ReportPrint({ items, date }) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.material }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.thickness ? `${it2.thickness} мм` : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: (_a4 = it2.bends) != null ? _a4 : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.flat ? `${fmt0$1(it2.flat)} мм` : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.length ? `${fmt0$1(it2.length)} мм` : "—" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: fmt0$1(it2.qty) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.flat ? `${fmt0$2(it2.flat)} мм` : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.length ? `${fmt0$2(it2.length)} мм` : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: fmt0$2(it2.qty) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: fmtW(it2.weightBatch) }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: td, children: [
-              fmt0$1(it2.metal),
+              fmt0$2(it2.metal),
               " ₽"
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: td, children: [
-              fmt0$1(it2.bending),
+              fmt0$2(it2.bending),
+              " ₽"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: ((_b3 = it2.laser) != null ? _b3 : 0) > 0 ? `${fmt0$2(it2.laser)} ₽` : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: td, children: [
+              fmt0$2(it2.subtotal),
               " ₽"
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: td, children: [
-              fmt0$1(it2.subtotal),
-              " ₽"
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: td, children: [
-              fmt0$1(it2.vat),
+              fmt0$2(it2.vat),
               " ₽"
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: { ...td, fontWeight: 800 }, children: [
-              fmt0$1(it2.total),
+              fmt0$2(it2.total),
               " ₽"
             ] })
           ] }, it2.id);
@@ -56963,23 +57414,24 @@ function ReportPrint({ items, date }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: { ...th, textAlign: "right" }, colSpan: 8, children: "ИТОГО:" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: th, children: fmtW(tot.weight) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: th, children: [
-            fmt0$1(tot.metal),
+            fmt0$2(tot.metal),
             " ₽"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: th, children: [
-            fmt0$1(tot.bending),
+            fmt0$2(tot.bending),
+            " ₽"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: th, children: ((_c = tot.laser) != null ? _c : 0) > 0 ? `${fmt0$2(tot.laser)} ₽` : "—" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: th, children: [
+            fmt0$2(tot.subtotal),
             " ₽"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: th, children: [
-            fmt0$1(tot.subtotal),
-            " ₽"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: th, children: [
-            fmt0$1(tot.vat),
+            fmt0$2(tot.vat),
             " ₽"
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: { ...th, background: "#0f172a", color: "#fff", fontSize: 13 }, children: [
-            fmt0$1(tot.total),
+            fmt0$2(tot.total),
             " ₽"
           ] })
         ] })
@@ -56988,7 +57440,7 @@ function ReportPrint({ items, date }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: 14, fontSize: 10.5, color: "#475569", lineHeight: 1.7, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Условия:" }),
       " цены указаны на дату расчёта и не являются публичной офертой. Стоимость металла включает отходы раскроя 7 %. Наладка инструмента — ",
-      fmt0$1(tot.setup),
+      fmt0$2(tot.setup),
       " ₽ (при позиции партии от 10 шт. — бесплатно). Срок изготовления: от 3 рабочих дней. Расчёт развёртки выполнен по методике DIN 6935 (K-фактор), усилие гибки — по формуле воздушной гибки."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 22, fontSize: 11, color: "#334155" }, children: [
@@ -57086,6 +57538,16 @@ function App() {
       return null;
     }
   }, [input.profileId, input.thickness, input.vMatrix, input.flanges, input.angles]);
+  const cutLength = reactExports.useMemo(
+    () => geom ? polygonLength(geom.polygon) : 0,
+    [geom]
+  );
+  const resultWithCut = reactExports.useMemo(() => {
+    if (cutLength > 0) {
+      return calculate({ ...input, cutLengthMm: cutLength });
+    }
+    return result;
+  }, [input, cutLength, result]);
   const patch = (p2) => setInput((s2) => ({ ...s2, ...p2 }));
   const addCalcPosition = () => {
     setCart((c2) => [...c2, itemFromCalc(input, result)]);
@@ -57121,6 +57583,35 @@ function App() {
       console.log("[doExport] PDF готов");
     } catch (e) {
       console.error("[doExport] ОШИБКА:", e);
+    } finally {
+      setExporting(false);
+    }
+  };
+  const doExportInvoice = async () => {
+    setExporting(true);
+    try {
+      await new Promise((r) => setTimeout(r, 60));
+      const KEY = "fireprom-invoice-counter";
+      let num = 151;
+      try {
+        const saved = localStorage.getItem(KEY);
+        if (saved) num = Math.max(151, parseInt(saved, 10) || 151);
+      } catch {
+      }
+      const today = /* @__PURE__ */ new Date();
+      const dateShort = today.toISOString().slice(0, 10);
+      await exportInvoiceToPdf(
+        `schet-fireprom-${num}-${dateShort}.pdf`,
+        reportItems,
+        String(num),
+        today
+      );
+      try {
+        localStorage.setItem(KEY, String(num + 1));
+      } catch {
+      }
+    } catch (e) {
+      console.error("[doExportInvoice] ОШИБКА:", e);
     } finally {
       setExporting(false);
     }
@@ -57187,7 +57678,7 @@ function App() {
           onEvals: setFileEvals
         }
       ) }, tab),
-      tab === "manual" && geom && /* @__PURE__ */ jsxRuntimeExports.jsx(Results, { input, result, geom }),
+      tab === "manual" && geom && /* @__PURE__ */ jsxRuntimeExports.jsx(Results, { input, result: resultWithCut, geom }),
       (cart.length > 0 || fileEvals.length > 0 || result.ok) && /* @__PURE__ */ jsxRuntimeExports.jsx(
         SummaryPanel,
         {
@@ -57214,6 +57705,7 @@ function App() {
             onRemove: (id) => setCart((c2) => c2.filter((i2) => i2.id !== id)),
             onClear: () => setCart([]),
             onExportPdf: doExport,
+            onExportInvoice: doExportInvoice,
             onPrint: () => window.print(),
             exporting
           }
@@ -57261,4 +57753,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-2K0zZqC2.js.map
+//# sourceMappingURL=index-BIvoyPrl.js.map
