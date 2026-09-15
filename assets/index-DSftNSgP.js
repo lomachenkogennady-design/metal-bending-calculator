@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DEboyE6e.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CZYeUi-6.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24664,14 +24664,20 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   }, 1500);
 }
 const STORAGE_KEY = "fireprom-device-mode";
-function detectDevice() {
-  var _a3;
-  if (typeof navigator === "undefined") return "desktop";
+function isWeakDevice() {
+  var _a3, _b2;
+  if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
   const isMobile = /Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(ua);
+  const cores = (_a3 = navigator.hardwareConcurrency) != null ? _a3 : 4;
+  const mem = (_b2 = navigator.deviceMemory) != null ? _b2 : 4;
+  return isMobile || cores <= 4 || mem <= 4;
+}
+function detectDevice() {
+  if (typeof navigator === "undefined") return "desktop";
+  const isMobile = isWeakDevice();
   const narrow = typeof window !== "undefined" && window.innerWidth < 900;
-  const lowCores = ((_a3 = navigator.hardwareConcurrency) != null ? _a3 : 8) <= 4;
-  return isMobile || narrow || lowCores ? "mobile" : "desktop";
+  return isMobile || narrow ? "mobile" : "desktop";
 }
 function loadMode() {
   if (typeof localStorage === "undefined") return detectDevice();
@@ -57166,4 +57172,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-elvelGap.js.map
+//# sourceMappingURL=index-DSftNSgP.js.map
