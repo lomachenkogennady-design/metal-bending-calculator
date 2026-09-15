@@ -23923,7 +23923,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CEOSfAE6.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BaC7KWqK.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -55563,10 +55563,14 @@ function detectBendLines(loops, bb) {
     if (a2.span < tol * 4) return false;
     if (a2.axis === "y") {
       if (a2.coord - bb.minX < w2 * 0.025 || bb.maxX - a2.coord < w2 * 0.025) return false;
-      return a2.span >= h2 * 0.5;
+      const touchesTop = a2.to >= bb.maxY - h2 * 0.08;
+      const touchesBottom = a2.from <= bb.minY + h2 * 0.08;
+      return touchesTop && touchesBottom && a2.span >= h2 * 0.85;
     }
     if (a2.coord - bb.minY < h2 * 0.025 || bb.maxY - a2.coord < h2 * 0.025) return false;
-    return a2.span >= w2 * 0.5;
+    const touchesLeft = a2.from <= bb.minX + w2 * 0.08;
+    const touchesRight = a2.to >= bb.maxX - w2 * 0.08;
+    return touchesLeft && touchesRight && a2.span >= w2 * 0.85;
   }).sort((a2, b2) => a2.axis === b2.axis ? a2.coord - b2.coord : a2.axis < b2.axis ? -1 : 1);
 }
 function estimatePart(rawLoops, opts) {
@@ -56447,6 +56451,9 @@ function GeoCard({
   onCalib,
   title,
   onTitle,
+  parts,
+  partNames,
+  onPartNameChange,
   onAdd,
   added,
   onRemove
@@ -56558,6 +56565,38 @@ function GeoCard({
         { l: "Усилие", v: `${n1(ev.forceTon)} т` }
       ].map((c2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[9.5px] font-bold tracking-wide text-slate-400 uppercase", children: c2.l }),
+        parts && parts.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-2 rounded-lg border border-amber-200 bg-amber-50/40 p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-[11.5px] font-bold uppercase tracking-wider text-amber-800", children: [
+            "Детали файла (",
+            parts.length,
+            ") — задайте названия"
+          ] }),
+          parts.map((pp, i2) => {
+            var _a3;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "w-6 shrink-0 font-mono text-[11px] font-bold text-slate-400", children: [
+                "#",
+                i2 + 1
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "text",
+                  className: "field flex-1 py-1.5 text-[12.5px]",
+                  placeholder: `Деталь ${i2 + 1}`,
+                  value: (_a3 = partNames == null ? void 0 : partNames[i2]) != null ? _a3 : "",
+                  onChange: (e) => onPartNameChange == null ? void 0 : onPartNameChange(i2, e.target.value)
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 font-mono text-[10.5px] text-slate-500 whitespace-nowrap", children: [
+                pp.part.widthMm.toFixed(0),
+                "×",
+                pp.part.heightMm.toFixed(0),
+                " мм"
+              ] })
+            ] }, i2);
+          })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-mono text-[14px] font-bold text-slate-900", children: c2.v })
       ] }, c2.l)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-end justify-between gap-3 rounded-lg bg-slate-900 px-3.5 py-2.5", children: [
@@ -56611,6 +56650,7 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
   const [geoms, setGeoms] = reactExports.useState({});
   const [calib, setCalib] = reactExports.useState({});
   const [titles, setTitles] = reactExports.useState({});
+  const [partNames, setPartNames] = reactExports.useState({});
   const [added, setAdded] = reactExports.useState({});
   const dxfRef = reactExports.useRef(null);
   const pdfRef = reactExports.useRef(null);
@@ -56691,6 +56731,22 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
     });
     return map;
   }, [geoms, calib, tech]);
+  reactExports.useEffect(() => {
+    setPartNames((prev) => {
+      const next = { ...prev };
+      Object.entries(partsMap).forEach(([fid2, parts]) => {
+        var _a4;
+        const old = (_a4 = next[fid2]) != null ? _a4 : [];
+        if (old.length !== parts.length) {
+          next[fid2] = new Array(parts.length).fill("").map((_2, i2) => {
+            var _a5;
+            return (_a5 = old[i2]) != null ? _a5 : "";
+          });
+        }
+      });
+      return next;
+    });
+  }, [partsMap]);
   reactExports.useEffect(() => {
     onEvals == null ? void 0 : onEvals(list);
   }, [JSON.stringify(list.map((e) => [e.geom.fileId, e.cost.total, e.weightBatch, e.part.nBends, e.quality]))]);
@@ -57028,14 +57084,23 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
             onCalib: (v2) => setCalib((c2) => ({ ...c2, [ev.geom.fileId]: v2 })),
             title: (_b3 = titles[ev.geom.fileId]) != null ? _b3 : "",
             onTitle: (v2) => setTitles((t2) => ({ ...t2, [ev.geom.fileId]: v2 })),
+            parts: partsMap[ev.geom.fileId],
+            partNames: partNames[ev.geom.fileId],
+            onPartNameChange: (idx, name) => setPartNames((s2) => {
+              var _a5;
+              const fileNames = [...(_a5 = s2[ev.geom.fileId]) != null ? _a5 : []];
+              fileNames[idx] = name;
+              return { ...s2, [ev.geom.fileId]: fileNames };
+            }),
             added: !!added[ev.geom.fileId],
             onAdd: () => {
-              var _a5, _b4, _c2;
+              var _a5, _b4, _c2, _d2;
               const fileParts = (_a5 = partsMap[ev.geom.fileId]) != null ? _a5 : [];
+              const names = (_b4 = partNames[ev.geom.fileId]) != null ? _b4 : [];
               if (fileParts.length > 1 && onAddParts) {
-                onAddParts(fileParts, (_b4 = titles[ev.geom.fileId]) != null ? _b4 : ev.geom.name, client2);
+                onAddParts(fileParts, names, (_c2 = titles[ev.geom.fileId]) != null ? _c2 : ev.geom.name, client2);
               } else {
-                onAdd(ev, (_c2 = titles[ev.geom.fileId]) != null ? _c2 : ev.geom.name, client2);
+                onAdd(ev, (_d2 = titles[ev.geom.fileId]) != null ? _d2 : ev.geom.name, client2);
               }
               setAdded((a2) => ({ ...a2, [ev.geom.fileId]: true }));
               setTimeout(() => setAdded((a2) => ({ ...a2, [ev.geom.fileId]: false })), 1800);
@@ -58374,23 +58439,23 @@ function App() {
       return (_a3 = document.getElementById("smeta")) == null ? void 0 : _a3.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 250);
   };
-  const addExtractedParts = (evs, title, client2) => {
+  const addExtractedParts = (evs, names, title, client2) => {
     const mat = MATERIALS.find((m2) => m2.id === fileTech.materialId);
     setCart((c2) => [
       ...c2,
-      ...evs.map(
-        (ev, idx) => {
-          var _a3;
-          return itemFromExtracted(
-            ev,
-            `${title} · деталь ${idx + 1}`,
-            client2,
-            fileTech.quantity,
-            (_a3 = mat == null ? void 0 : mat.short) != null ? _a3 : "",
-            fileTech.thickness
-          );
-        }
-      )
+      ...evs.map((ev, idx) => {
+        var _a3, _b2;
+        const custom = ((_a3 = names[idx]) != null ? _a3 : "").trim();
+        const partTitle = custom ? `${title} · ${custom}` : `${title} · деталь ${idx + 1}`;
+        return itemFromExtracted(
+          ev,
+          partTitle,
+          client2,
+          fileTech.quantity,
+          (_b2 = mat == null ? void 0 : mat.short) != null ? _b2 : "",
+          fileTech.thickness
+        );
+      })
     ]);
     setTimeout(() => {
       var _a3;
@@ -58579,4 +58644,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DoxVCUWv.js.map
+//# sourceMappingURL=index-iugfDTxj.js.map
