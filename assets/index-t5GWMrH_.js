@@ -12698,6 +12698,7 @@ function buildProfile(spec, t2, R2, anglesDeg) {
     }
   }
   if (spec.closed) mold.push({ ...mold[0] });
+  else mold.push(cur);
   const centers = [];
   const tanA = [];
   const tanB = [];
@@ -31549,7 +31550,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CshqmBRt.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BHA-RX2r.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -94162,4 +94163,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-MMpsCigu.js.map
+//# sourceMappingURL=index-t5GWMrH_.js.map
