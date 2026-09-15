@@ -23923,7 +23923,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-CwPHB8vi.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-hEI57z2y.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24891,9 +24891,21 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   }));
   if (nestingParts.length > 0) {
     const nest = nestOnSheets(nestingParts);
-    ensureSpace(30);
+    const COLORS2 = [
+      [245, 158, 11],
+      [239, 68, 68],
+      [59, 130, 246],
+      [16, 185, 129],
+      [139, 92, 246],
+      [236, 72, 153],
+      [6, 182, 212],
+      [132, 204, 22],
+      [249, 115, 22],
+      [99, 102, 241]
+    ];
+    ensureSpace(40);
     pdf.setFont(FONT, "bold");
-    pdf.setFontSize(9);
+    pdf.setFontSize(10);
     pdf.setTextColor(15, 23, 42);
     pdf.text(`Раскрой на листах ${nest.sheetW}×${nest.sheetH} мм`, mx, y2);
     y2 += 4;
@@ -24905,13 +24917,99 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       mx,
       y2
     );
-    y2 += 4;
-    pdf.setFontSize(8);
-    pdf.setTextColor(120);
-    const perSheet = nest.sheets.map((sh, i2) => `Лист ${i2 + 1}: ${sh.placed.length}`).join(" · ");
-    pdf.text(perSheet, mx, y2, { maxWidth: cw });
-    y2 += 6;
-    pdf.setTextColor(0);
+    y2 += 5;
+    const sheetsPerRow = 2;
+    const gapX = 6, gapY = 12;
+    const sheetW_draw = (cw - gapX * (sheetsPerRow - 1)) / sheetsPerRow;
+    const scaleFactor = sheetW_draw / nest.sheetW;
+    const sheetH_draw = nest.sheetH * scaleFactor;
+    for (let i2 = 0; i2 < nest.sheets.length; i2++) {
+      const sh = nest.sheets[i2];
+      const col = i2 % sheetsPerRow;
+      if (col === 0 && i2 > 0) {
+        y2 += gapY;
+      }
+      if (y2 + sheetH_draw + 8 > pageH - 20) {
+        pdf.addPage();
+        y2 = 16;
+      }
+      const sx = mx + col * (sheetW_draw + gapX);
+      const sy = y2;
+      pdf.setFont(FONT, "bold");
+      pdf.setFontSize(8);
+      pdf.setTextColor(60);
+      pdf.text(
+        `Лист ${sh.index} / ${nest.sheetCount}  (${sh.placed.length} дет.)`,
+        sx,
+        sy - 1.5
+      );
+      pdf.setDrawColor(120, 130, 145);
+      pdf.setLineWidth(0.3);
+      pdf.setFillColor(245, 247, 250);
+      pdf.rect(sx, sy, sheetW_draw, sheetH_draw, "FD");
+      sh.placed.forEach((part, pi) => {
+        const px = sx + part.x * scaleFactor;
+        const py = sy + part.y * scaleFactor;
+        const pw = part.w * scaleFactor;
+        const ph = part.h * scaleFactor;
+        const [r, g2, b2] = COLORS2[pi % COLORS2.length];
+        pdf.setFillColor(r, g2, b2);
+        pdf.setDrawColor(40, 50, 65);
+        pdf.setLineWidth(0.15);
+        pdf.rect(px, py, pw, ph, "FD");
+        if (pw > 12 && ph > 4) {
+          pdf.setFont(FONT, "normal");
+          pdf.setFontSize(5.5);
+          pdf.setTextColor(255, 255, 255);
+          const label = String(part.title || "").slice(0, 12);
+          pdf.text(label, px + pw / 2, py + ph / 2 + 1, {
+            align: "center",
+            maxWidth: pw - 2
+          });
+        }
+      });
+      pdf.setFont(FONT, "normal");
+      pdf.setFontSize(6);
+      pdf.setTextColor(120, 130, 145);
+      pdf.text(`${nest.sheetW} мм`, sx + sheetW_draw / 2, sy + sheetH_draw + 3, { align: "center" });
+      pdf.text(`${nest.sheetH}`, sx - 2, sy + sheetH_draw / 2 + 1, { align: "right" });
+    }
+    const totalRows = Math.ceil(nest.sheets.length / sheetsPerRow);
+    y2 += totalRows * (sheetH_draw + gapY) - gapY + 6;
+    if (nest.sheets.length > 0) {
+      const uniqueParts = Array.from(new Map(nestingParts.map((p2) => [p2.id, p2])).values());
+      pdf.setFont(FONT, "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(80);
+      let lx = mx;
+      uniqueParts.slice(0, 6).forEach((up, i2) => {
+        const [r, g2, b2] = COLORS2[i2 % COLORS2.length];
+        pdf.setFillColor(r, g2, b2);
+        pdf.rect(lx, y2 - 2, 3, 3, "F");
+        pdf.setTextColor(40);
+        pdf.text(`${up.title.slice(0, 20)} · ${up.width}×${up.height}`, lx + 4, y2);
+        lx += 4 + pdf.getTextWidth(`${up.title.slice(0, 20)} · ${up.width}×${up.height}`) + 6;
+        if (lx > pageW - mx - 30) {
+          lx = mx;
+          y2 += 4;
+        }
+      });
+      y2 += 6;
+      pdf.setTextColor(0);
+    }
+    if (nest.unplaced.length > 0) {
+      pdf.setFont(FONT, "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(180, 20, 20);
+      pdf.text(
+        `⛔ Не размещено на листе: ${nest.unplaced.map((u2) => u2.title).join(", ")}`,
+        mx,
+        y2,
+        { maxWidth: cw }
+      );
+      y2 += 5;
+      pdf.setTextColor(0);
+    }
   }
   ensureSpace(20);
   pdf.setFont(FONT, "normal");
@@ -58364,4 +58462,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-l1oNg85n.js.map
+//# sourceMappingURL=index-DGjdaZT-.js.map
