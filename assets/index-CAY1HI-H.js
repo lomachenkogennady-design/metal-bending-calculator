@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-C4jQARGD.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-Be_rfWmc.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -86384,10 +86384,15 @@ function App() {
   };
   const reportItems = cart.length ? cart : [itemFromCalc(input, result)];
   const doExport = async () => {
+    console.log("[doExport] НАЖАТА кнопка Экспорт PDF");
     setExporting(true);
     try {
       await new Promise((r) => setTimeout(r, 60));
+      console.log("[doExport] вызываю exportReportToPdf, позиций:", reportItems.length);
       await exportReportToPdf(`smeta-fireprom-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.pdf`, reportItems);
+      console.log("[doExport] PDF готов");
+    } catch (e) {
+      console.error("[doExport] ОШИБКА:", e);
     } finally {
       setExporting(false);
     }
@@ -86523,4 +86528,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-fzP38N_Z.js.map
+//# sourceMappingURL=index-CAY1HI-H.js.map
