@@ -12511,7 +12511,7 @@ const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6];
 const PROFILES = [
   { id: "angle", name: "Уголок", flanges: [50, 50], turns: [1], cs: [[1, 1]] },
   { id: "u", name: "П-образный", flanges: [40, 80, 40], turns: [1, 1], cs: [[1, 1], [1, 1]] },
-  { id: "z", name: "Z-образный", flanges: [40, 60, 40], turns: [1, -1], cs: [[1, 1], [-1, -1]] },
+  { id: "z", name: "Z-образный", flanges: [40, 60, 40], turns: [-1, 1], cs: [[1, 1], [-1, -1]] },
   { id: "hat", name: "Шляпный", flanges: [30, 40, 60, 40, 30], turns: [1, -1, -1, 1], cs: [[1, -1], [-1, -1], [-1, -1], [-1, 1]] },
   { id: "box", name: "Короб", flanges: [30, 60, 30, 60], turns: [1, 1, 1, 1], cs: [[1, 1], [1, 1], [1, 1], [1, 1]], closed: true }
 ];
@@ -23773,7 +23773,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-D2nFJrx8.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-D3y7YRUc.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24821,7 +24821,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
             className: `rounded-lg border px-1 py-2.5 text-[11px] font-semibold transition ${input.profileId === p2.id ? "border-amber-500 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(245,158,11,0.15)]" : "border-slate-300 bg-white text-slate-500 hover:border-slate-400"}`,
             children: [
               p2.name,
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block font-mono text-[10px] font-bold text-slate-400", children: p2.flanges.length === 2 ? "1 гиб" : `${p2.flanges.length - 1} гиба` })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block font-mono text-[10px] font-bold text-slate-400", children: p2.closed ? `${p2.flanges.length} гиба` : p2.flanges.length === 2 ? "1 гиб" : `${p2.flanges.length - 1} гиба` })
             ]
           },
           p2.id
@@ -56103,7 +56103,7 @@ function ProfileCanvas({ geom, angles, className }) {
     if (!isFinite(minX)) return;
     const bw = maxX - minX || 1;
     const bh = maxY - minY || 1;
-    const padL = 56, padR = 56, padT = 38, padB = 48;
+    const padL = 64, padR = 64, padT = 56, padB = 64;
     const availW = Math.max(40, W2 - padL - padR);
     const availH = Math.max(40, H2 - padT - padB);
     const scale = Math.min(availW / bw, availH / bh);
@@ -56151,65 +56151,88 @@ function ProfileCanvas({ geom, angles, className }) {
       ctx.lineTo(ax + 7 * Math.cos(dir + 0.42), ay + 7 * Math.sin(dir + 0.42));
       ctx.stroke();
     };
-    const dimH = (px12, px2, yDim, label) => {
-      ctx.strokeStyle = ink;
-      ctx.fillStyle = ink;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(px12, yDim - 4);
-      ctx.lineTo(px12, yDim + 4);
-      ctx.moveTo(px2, yDim - 4);
-      ctx.lineTo(px2, yDim + 4);
-      ctx.moveTo(px12, yDim);
-      ctx.lineTo(px2, yDim);
-      ctx.stroke();
-      arrow(px12, yDim, Math.PI);
-      arrow(px2, yDim, 0);
+    const [pcx, pcy] = P2({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 });
+    if (moldPoints && moldPoints.length >= 2) {
+      for (let i2 = 0; i2 < moldPoints.length - 1; i2++) {
+        const a2 = moldPoints[i2];
+        const b2 = moldPoints[i2 + 1];
+        const segLen = Math.hypot(b2.x - a2.x, b2.y - a2.y);
+        if (segLen < 0.5) continue;
+        const [ax, ay] = P2(a2);
+        const [bx, by] = P2(b2);
+        const dxs = bx - ax;
+        const dys = by - ay;
+        const slen = Math.hypot(dxs, dys);
+        if (slen < 1) continue;
+        let nx = -dys / slen;
+        let ny = dxs / slen;
+        const midX = (ax + bx) / 2;
+        const midY = (ay + by) / 2;
+        if ((midX - pcx) * nx + (midY - pcy) * ny < 0) {
+          nx = -nx;
+          ny = -ny;
+        }
+        const offset = 22;
+        const ox1 = ax + nx * offset;
+        const oy1 = ay + ny * offset;
+        const ox2 = bx + nx * offset;
+        const oy2 = by + ny * offset;
+        ctx.strokeStyle = ink;
+        ctx.fillStyle = ink;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ax + nx * 4, ay + ny * 4);
+        ctx.lineTo(ox1 + nx * 4, oy1 + ny * 4);
+        ctx.moveTo(bx + nx * 4, by + ny * 4);
+        ctx.lineTo(ox2 + nx * 4, oy2 + ny * 4);
+        ctx.moveTo(ox1, oy1);
+        ctx.lineTo(ox2, oy2);
+        ctx.stroke();
+        const ang = Math.atan2(oy2 - oy1, ox2 - ox1);
+        arrow(ox1, oy1, ang);
+        arrow(ox2, oy2, ang + Math.PI);
+        const labelX = (ox1 + ox2) / 2 + nx * 10;
+        const labelY = (oy1 + oy2) / 2 + ny * 10;
+        const label = `${segLen.toFixed(1)}`;
+        ctx.font = mono;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const isVertical = Math.abs(Math.abs(ang) - Math.PI / 2) < 0.35;
+        if (isVertical) {
+          ctx.save();
+          ctx.translate(labelX, labelY);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillText(label, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.fillText(label, labelX, labelY);
+        }
+      }
+    }
+    if (moldPoints && moldPoints.length > 2) {
+      const label = `R${radius} · t${thickness}`;
       ctx.font = mono;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(label, (px12 + px2) / 2, yDim - 6);
-    };
-    const dimV = (py12, py2, xDim, label) => {
-      ctx.strokeStyle = ink;
-      ctx.fillStyle = ink;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(xDim - 4, py12);
-      ctx.lineTo(xDim + 4, py12);
-      ctx.moveTo(xDim - 4, py2);
-      ctx.lineTo(xDim + 4, py2);
-      ctx.moveTo(xDim, py12);
-      ctx.lineTo(xDim, py2);
-      ctx.stroke();
-      arrow(xDim, py12, Math.PI / 2);
-      arrow(xDim, py2, -Math.PI / 2);
-      ctx.save();
-      ctx.font = mono;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.translate(xDim - 8, (py12 + py2) / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText(label, 0, 0);
-      ctx.restore();
-    };
-    const [px0, py0] = P2({ x: minX, y: minY });
-    const [px1, py1] = P2({ x: maxX, y: maxY });
-    dimH(px0, px1, py1 + (py0 - py1) + 22, `${bw.toFixed(1)} мм`);
-    dimV(py1, py0, px0 - 22, `${bh.toFixed(1)} мм`);
-    if (moldPoints && moldPoints.length > 1) {
-      const ml = moldPoints[moldPoints.length - 1];
-      const [rx, ry] = P2(ml);
-      ctx.strokeStyle = "#b45309";
-      ctx.fillStyle = "#b45309";
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(rx, ry, 3.5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.font = mono;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(`R${radius} · t${thickness}`, rx + 7, ry + 13);
+      for (let i2 = 1; i2 < moldPoints.length - 1; i2++) {
+        const pt2 = moldPoints[i2];
+        const [rx, ry] = P2(pt2);
+        ctx.strokeStyle = "#b45309";
+        ctx.fillStyle = "#ffffff";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        const [ccx, ccy] = P2({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 });
+        const dxl = rx - ccx;
+        const dyl = ry - ccy;
+        const dlen = Math.hypot(dxl, dyl) || 1;
+        const offX = dxl / dlen * 24;
+        const offY = dyl / dlen * 24;
+        ctx.fillStyle = "#b45309";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, rx + offX, ry + offY);
+      }
     }
   }, [geom, angles, resizeTick]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("canvas", { ref, className, style: { display: "block" } });
@@ -56664,16 +56687,16 @@ const nf1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 const fmtW = (v2) => nf1.format(v2);
 const td = {
   border: "1px solid #cbd5e1",
-  padding: "7px 9px",
-  fontSize: 12,
+  padding: "3px 4px",
+  fontSize: 9,
   verticalAlign: "top",
   whiteSpace: "nowrap"
 };
 const th = {
   ...td,
-  background: "#eef2f7",
+  background: "#f2f2f2",
   fontWeight: 700,
-  fontSize: 11,
+  fontSize: 8,
   textTransform: "uppercase",
   letterSpacing: 0.4
 };
@@ -56683,7 +56706,7 @@ function ReportPrint({ items, date }) {
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
   const num = `КГ-${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontFamily: "Inter, Arial, sans-serif", padding: "36px 40px", color: "#0f172a" }, children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontFamily: "Inter, Arial, sans-serif", padding: "20px 24px", color: "#0f172a" }, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "3px solid #0f172a", paddingBottom: 14 }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: 12, alignItems: "center" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { width: 44, height: 44, borderRadius: 10, background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "26", height: "26", viewBox: "0 0 32 32", fill: "none", children: [
@@ -56728,13 +56751,13 @@ function ReportPrint({ items, date }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { style: { borderCollapse: "collapse", width: "100%" }, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: { ...th, width: 26 }, children: "№" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Наименование" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Материал" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Наимен." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Матер." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Толщ." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Гибов" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Развёртка" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Разв." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Длина" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Кол-во" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Кол." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Вес, кг" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Металл" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Гибка" }),
@@ -57086,4 +57109,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-Dx6BSXKX.js.map
+//# sourceMappingURL=index-PavSDhSW.js.map
