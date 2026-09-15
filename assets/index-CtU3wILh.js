@@ -13001,6 +13001,9 @@ function itemFromExtracted(ev, title, client2, quantity, materialShort, thicknes
     metal: ev.cost.metal,
     bending: ev.cost.bending,
     setup: ev.cost.setup,
+    laser: ev.cost.laser,
+    laserLengthM: ev.cost.laserLengthM,
+    laserPierceCount: ev.cost.laserPierceCount,
     subtotal: ev.cost.subtotal,
     vat: ev.cost.vat,
     total: ev.cost.total,
@@ -23920,7 +23923,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-5s_Hn6GW.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DpuqTX6g.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -55946,7 +55949,7 @@ function measureUnits(geom) {
   return Math.max(b2.maxX - b2.minX, b2.maxY - b2.minY);
 }
 function evaluateFile(geom, calibWidthMm, p2) {
-  var _a3;
+  var _a3, _b2, _c, _d;
   const mat = (_a3 = MATERIALS.find((m2) => m2.id === p2.materialId)) != null ? _a3 : MATERIALS[0];
   const notes = [...geom.warnings];
   const t2 = Math.max(0.2, p2.thickness);
@@ -56011,7 +56014,18 @@ function evaluateFile(geom, calibWidthMm, p2) {
   const metal = round2(weightBatch * p2.metalPrice * WASTE_FACTOR);
   const bending = round2(scaled.nBends * (L2 / 1e3) * p2.pricePerMeter * Math.max(1, p2.quantity));
   const setup = round2(p2.setupCost);
-  const subtotal = round2(metal + bending + setup);
+  const cutLengthMm = scaled.cutLengthMm && scaled.cutLengthMm > 0 ? scaled.cutLengthMm : L2 * 2 + scaled.partLengthMm * 2;
+  const laserEnabled = (_b2 = p2.laserEnabled) != null ? _b2 : false;
+  const pierceCount = (_c = p2.laserPierceCount) != null ? _c : 0;
+  const laserCalc = laserEnabled ? calcLaserCost(
+    mat.id,
+    t2,
+    cutLengthMm,
+    pierceCount,
+    (_d = p2.laserPrice) != null ? _d : 0
+  ) : { lengthM: 0, pierceCount: 0, cost: 0 };
+  const laser = round2(laserCalc.cost * Math.max(1, p2.quantity));
+  const subtotal = round2(metal + bending + setup + laser);
   const vat = round2(subtotal * VAT_RATE);
   const total = round2(subtotal + vat);
   notes.push(...part.notes);
@@ -56037,7 +56051,17 @@ function evaluateFile(geom, calibWidthMm, p2) {
     forceTon,
     forceKN,
     recommendedPress,
-    cost: { metal, bending, setup, subtotal, vat, total },
+    cost: {
+      metal,
+      bending,
+      setup,
+      laser,
+      laserLengthM: round2(laserCalc.lengthM * Math.max(1, p2.quantity)),
+      laserPierceCount: laserCalc.pierceCount * Math.max(1, p2.quantity),
+      subtotal,
+      vat,
+      total
+    },
     perPiece: total / Math.max(1, p2.quantity),
     quality,
     notes
@@ -56303,7 +56327,7 @@ function GeoCard({
 }
 let fid = 1;
 function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onAdd, onEvals }) {
-  var _a3;
+  var _a3, _b2, _c, _d;
   const [busy, setBusy] = reactExports.useState(false);
   const [geoms, setGeoms] = reactExports.useState({});
   const [calib, setCalib] = reactExports.useState({});
@@ -56599,6 +56623,56 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
             )
           ] })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-200 bg-amber-50/50 p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex items-center justify-between", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-[12px] font-bold text-slate-700", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: (_b2 = tech.laserEnabled) != null ? _b2 : false,
+                  onChange: (e) => onTech({ laserEnabled: e.target.checked }),
+                  className: "h-4 w-4 accent-amber-600"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "🔦 Лазерная резка контура" })
+            ] }),
+            tech.laserEnabled && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-800", children: "вкл." })
+          ] }),
+          tech.laserEnabled && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+                "Цена, ₽/м ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint font-normal", children: "(0 = авто)" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                NumberField,
+                {
+                  value: (_c = tech.laserPrice) != null ? _c : 0,
+                  onChange: (v2) => onTech({ laserPrice: v2 }),
+                  min: 0,
+                  step: 5,
+                  placeholder: "авто"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+                "Врезок ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint font-normal", children: "на деталь" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                NumberField,
+                {
+                  value: (_d = tech.laserPierceCount) != null ? _d : 0,
+                  onChange: (v2) => onTech({ laserPierceCount: v2 }),
+                  min: 0,
+                  step: 1
+                }
+              )
+            ] })
+          ] })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-2 sm:grid-cols-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
@@ -56659,14 +56733,14 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-4 xl:grid-cols-2", children: list.map((ev) => {
-        var _a4, _b2;
+        var _a4, _b3;
         return /* @__PURE__ */ jsxRuntimeExports.jsx(
           GeoCard,
           {
             ev,
             calib: (_a4 = calib[ev.geom.fileId]) != null ? _a4 : "",
             onCalib: (v2) => setCalib((c2) => ({ ...c2, [ev.geom.fileId]: v2 })),
-            title: (_b2 = titles[ev.geom.fileId]) != null ? _b2 : "",
+            title: (_b3 = titles[ev.geom.fileId]) != null ? _b3 : "",
             onTitle: (v2) => setTitles((t2) => ({ ...t2, [ev.geom.fileId]: v2 })),
             added: !!added[ev.geom.fileId],
             onAdd: () => {
@@ -57966,7 +58040,7 @@ function App() {
   const [fileTech, setFileTech] = reactExports.useState(() => {
     var _a3;
     try {
-      return { ...{ materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1e3, forceLength: false, bendsOverride: null }, ...JSON.parse((_a3 = localStorage.getItem("fireprom-files-tech")) != null ? _a3 : "{}") };
+      return { ...{ materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1e3, forceLength: false, bendsOverride: null, laserEnabled: false, laserPrice: 0, laserPierceCount: 0 }, ...JSON.parse((_a3 = localStorage.getItem("fireprom-files-tech")) != null ? _a3 : "{}") };
     } catch {
       return { materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1e3, forceLength: false, bendsOverride: null };
     }
@@ -58215,4 +58289,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-BW1q4MhE.js.map
+//# sourceMappingURL=index-CtU3wILh.js.map
