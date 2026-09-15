@@ -23868,7 +23868,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-COsNSr5V.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-2JmJkJFc.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24593,7 +24593,7 @@ async function loadFontAsBase64(url) {
   return btoa(binary);
 }
 async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Date()) {
-  var _a3, _b2;
+  var _a3, _b2, _c;
   const tot = cartTotals(items);
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const pdf = new E("p", "mm", "a4");
@@ -24722,6 +24722,29 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
     pdf.line(mx, y2 + rowH, mx + cw, y2 + rowH);
     y2 += rowH;
   });
+  y2 += 4;
+  const breakdown = [
+    { label: "Металл", value: tot.metal },
+    { label: "Гибка", value: tot.bending },
+    { label: "Лазерная резка", value: (_c = tot.laser) != null ? _c : 0 },
+    { label: "Наладка инструмента", value: tot.setup }
+  ];
+  const activeBreakdown = breakdown.filter((r) => r.value > 0);
+  if (activeBreakdown.length > 0) {
+    pdf.setFont(FONT, "normal");
+    pdf.setFontSize(9);
+    pdf.setTextColor(50);
+    activeBreakdown.forEach((r) => {
+      pdf.text(r.label + ":", mx + cw - 60, y2, { align: "right" });
+      pdf.text(fmt0$1(r.value) + " ₽", mx + cw, y2, { align: "right" });
+      y2 += 5;
+    });
+    pdf.setDrawColor(200, 205, 215);
+    pdf.setLineWidth(0.3);
+    pdf.line(mx + cw - 100, y2 - 3, mx + cw, y2 - 3);
+    y2 += 3;
+    pdf.setTextColor(0);
+  }
   ensureSpace(rowH + 2);
   pdf.setFillColor(15, 23, 42);
   pdf.setTextColor(255);
@@ -25022,10 +25045,11 @@ async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__P
   };
   drawHeader();
   items.forEach((it2, i2) => {
+    var _a4, _b3;
     const price = it2.qty > 0 ? it2.subtotal / it2.qty : 0;
     const rowData = [
       String(i2 + 1),
-      it2.title + (it2.profile ? ` · ${it2.profile}` : "") + (it2.note ? ` · ${it2.note}` : ""),
+      it2.title + (it2.profile && !it2.title.includes(it2.profile) ? ` · ${it2.profile}` : "") + (it2.note ? ` · ${it2.note}` : "") + (((_a4 = it2.laser) != null ? _a4 : 0) > 0 ? ` · лазерная резка ${((_b3 = it2.laserLengthM) != null ? _b3 : 0).toFixed(1)} м` : ""),
       fmt0(it2.qty),
       "шт.",
       fmt2(price),
@@ -25436,32 +25460,6 @@ function ManualTab({ input, onChange, onAdd, added }) {
               readOnly: true,
               className: "field field-readonly",
               value: fmt2$1(displayR)
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Тоннаж пресса, т" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              value: input.pressTon,
-              onChange: (v2) => onChange({ pressTon: v2 }),
-              step: 5,
-              min: 1
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Наладка, ₽" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              value: input.setupCost,
-              onChange: (v2) => onChange({ setupCost: v2 }),
-              step: 10,
-              min: 0
             }
           )
         ] })
@@ -57753,4 +57751,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-BIvoyPrl.js.map
+//# sourceMappingURL=index-1-9-Xjr-.js.map
