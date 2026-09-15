@@ -23817,7 +23817,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-Cd8a4pLW.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DmL_PEBl.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -57128,10 +57128,14 @@ function App() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("header", { className: "blueprint-grid-dark sticky top-0 z-40 border-b border-white/10 bg-ink text-white no-print", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 shadow-lg shadow-amber-500/30", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "22", height: "22", viewBox: "0 0 32 32", fill: "none", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M7 23 L16 9 L25 23", stroke: "#141b29", strokeWidth: "3.2", strokeLinecap: "round", strokeLinejoin: "round" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M11.5 23 L16 16 L20.5 23", stroke: "#fff", strokeWidth: "2.2", strokeLinecap: "round" })
-        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "img",
+          {
+            src: "/metal-bending-calculator/logo.jpg",
+            alt: "ФАЙЕРПРОМ",
+            className: "h-11 w-11 rounded-full object-contain shadow-lg shadow-amber-500/20"
+          }
+        ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[15px] leading-tight font-black tracking-wide", children: "ООО «ФАЙЕРПРОМ»" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[11px] font-medium text-slate-400", children: "гибка металла · лазерный раскрой · сварка" })
@@ -57257,4 +57261,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-BXSvgMHi.js.map
+//# sourceMappingURL=index-2K0zZqC2.js.map
