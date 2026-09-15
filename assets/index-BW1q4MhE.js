@@ -12503,13 +12503,51 @@ function requireClient() {
 }
 var clientExports = requireClient();
 const MATERIALS = [
-  { id: "steel", name: "Сталь чёрная Ст3 (Rm=400 МПа)", short: "Ст3", rm: 400, density: 7850, color: 9279656, price: 75 },
-  { id: "stainless", name: "Нержавеющая AISI 304 (Rm=620 МПа)", short: "AISI 304", rm: 620, density: 7900, color: 13226716, price: 550 },
-  { id: "aluminium", name: "Алюминий АМг2 (Rm=190 МПа)", short: "АМг2", rm: 190, density: 2690, color: 14278115, price: 320 }
+  {
+    id: "steel",
+    name: "Оцинкованная сталь ОЦ",
+    short: "ОЦ",
+    spec: "Лист ОЦ 1,5×1250×2500 / Ц-А-БШ-БД-НО-АП-02-140-М-ПС ГОСТ 14918-2020",
+    rm: 320,
+    density: 7850,
+    color: 11056320,
+    price: 93
+  },
+  {
+    id: "steel-black",
+    name: "Сталь чёрная холоднокатаная",
+    short: "х/к",
+    spec: "Лист 1,2×1250×2500 БТ-БШ-БД-ПВ-О ГОСТ 19904-90 / 08пс-6-П-Г ГОСТ 16523-97",
+    rm: 370,
+    density: 7850,
+    color: 9279656,
+    price: 75
+  },
+  {
+    id: "stainless",
+    name: "Нержавеющая AISI 304 (08Х18Н10)",
+    short: "AISI 304",
+    spec: "Лист AISI 304 х/к мат (2В) ГОСТ 5632-2014",
+    rm: 620,
+    density: 7900,
+    color: 13226716,
+    price: 550
+  },
+  {
+    id: "aluminium",
+    name: "Алюминий АМг2",
+    short: "АМг2",
+    spec: "Лист АМг2М ГОСТ 21631-2019",
+    rm: 190,
+    density: 2690,
+    color: 14278115,
+    price: 320
+  }
 ];
 const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2];
 const WORKSHOP = {
   laser: {
+    sheet: { w: 2500, h: 1250 },
     maxThickness: { steel: 5, stainless: 3, aluminium: 3 },
     /** Цены резки ₽/м по материалу и толщине (среднерыночные) */
     pricePerMeter: {
@@ -12916,7 +12954,7 @@ function itemFromCalc(input, result) {
   return {
     id: nextId(),
     kind: "calc",
-    title: input.detailName || `${(_a3 = prof == null ? void 0 : prof.name) != null ? _a3 : "Деталь"} ${input.thickness} мм`,
+    title: input.detailName || `${(_a3 = prof == null ? void 0 : prof.name) != null ? _a3 : "Деталь"} ${String(input.thickness).replace(".", ",")} мм`,
     material: (_b2 = mat == null ? void 0 : mat.short) != null ? _b2 : "",
     thickness: input.thickness,
     profile: prof == null ? void 0 : prof.name,
@@ -12937,13 +12975,21 @@ function itemFromCalc(input, result) {
     client: { name: input.clientName, phone: input.clientPhone, email: input.clientEmail }
   };
 }
+function shortName(name, max = 36) {
+  let s2 = (name || "").trim().replace(/\s+/g, " ");
+  const parts = s2.split(/\s+-\s+/).filter((p2) => p2.length > 0 && p2 !== "sh" && p2 !== "br");
+  if (parts.length > 2) s2 = parts.slice(0, 2).join(" · ");
+  else if (parts.length > 0) s2 = parts.join(" · ");
+  if (s2.length > max) s2 = s2.slice(0, max - 1).trim() + "…";
+  return s2 || "Позиция";
+}
 function itemFromExtracted(ev, title, client2, quantity, materialShort, thickness) {
   const p2 = ev.part;
   const src = ev.geom.source === "dxf" ? "DXF" : ev.geom.source === "pdf-vector" ? "PDF-вектор" : "скан";
   return {
     id: nextId(),
     kind: "custom",
-    title: title || ev.geom.name,
+    title: shortName(title || ev.geom.name),
     material: `${materialShort} · ${src}`,
     thickness,
     profile: `${p2.mode === "flat" ? "Развёртка" : "Сечение"} · K=${ev.kFactor.toFixed(2)} · R${ev.innerRadius}`,
@@ -12968,10 +13014,11 @@ function cartTotals(items) {
   const vat = items.reduce((s2, i2) => s2 + i2.vat, 0);
   return {
     qty: items.reduce((s2, i2) => s2 + i2.qty, 0),
-    weight: Math.round(items.reduce((s2, i2) => s2 + i2.weightBatch, 0) * 10) / 10,
+    weight: Math.round(items.reduce((s2, i2) => s2 + i2.weightBatch, 0) * 1e3) / 1e3,
     metal: items.reduce((s2, i2) => s2 + i2.metal, 0),
     bending: items.reduce((s2, i2) => s2 + i2.bending, 0),
-    setup: items.reduce((s2, i2) => s2 + i2.setup, 0),
+    // Наладка берётся один раз на партию, не суммируется по позициям
+    setup: items.length > 0 ? Math.max(...items.map((i2) => i2.setup)) : 0,
     laser: items.reduce((s2, i2) => {
       var _a3;
       return s2 + ((_a3 = i2.laser) != null ? _a3 : 0);
@@ -12982,6 +13029,11 @@ function cartTotals(items) {
   };
 }
 const fmtMoney0 = (v2) => fmt0$2(Math.round(v2)) + " ₽";
+function fmtWeightText(v2) {
+  const n = Number(v2) || 0;
+  if (n > 0 && n < 0.1) return `${(n * 1e3).toFixed(1).replace(".", ",")} г`;
+  return `${n.toFixed(2).replace(".", ",")} кг`;
+}
 function buildSummary(opts) {
   var _a3, _b2, _c, _d, _e2, _f, _g, _h, _i, _j, _k, _l, _m;
   const manualPositions = [];
@@ -23868,7 +23920,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-2JmJkJFc.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-5s_Hn6GW.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24578,9 +24630,12 @@ E.API.PDFObject = (function() {
 const robotoRegularUrl = "/metal-bending-calculator/assets/Roboto-Regular-DPspvn0D.ttf";
 const robotoBoldUrl = "/metal-bending-calculator/assets/Roboto-Bold-BtpdIk24.ttf";
 const nf0$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
-const nf1$1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+const nf1$1 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmt0$1 = (v2) => nf0$1.format(v2);
-const fmt1 = (v2) => nf1$1.format(v2);
+const fmtWeight = (v2) => {
+  if (v2 > 0 && v2 < 0.1) return `${(v2 * 1e3).toFixed(1).replace(".", ",")} г`;
+  return `${nf1$1.format(v2)} кг`;
+};
 async function loadFontAsBase64(url) {
   const buf = await fetch(url).then((r) => r.arrayBuffer());
   const bytes = new Uint8Array(buf);
@@ -24634,20 +24689,20 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   y2 += 5;
   pdf.setTextColor(80);
   pdf.text(`Контакт: ${client2.phone || "—"}${client2.email ? " · " + client2.email : ""}`, mx, y2);
-  pdf.text(`Позиций: ${items.length}  ·  вес партии: ${fmt1(tot.weight)} кг`, pageW - mx, y2, { align: "right" });
+  pdf.text(`Позиций: ${items.length}  ·  вес партии: ${fmtWeight(tot.weight)}`, pageW - mx, y2, { align: "right" });
   pdf.setTextColor(0);
   y2 += 8;
   const cols = [
-    { key: "n", label: "№", w: 7, align: "center" },
-    { key: "name", label: "Наименование", w: 42, align: "left" },
-    { key: "mat", label: "Материал", w: 22, align: "left" },
-    { key: "th", label: "Толщ.", w: 12, align: "center" },
-    { key: "bnd", label: "Гиб.", w: 10, align: "center" },
-    { key: "fl", label: "Разв., мм", w: 16, align: "right" },
-    { key: "len", label: "Длина, мм", w: 16, align: "right" },
-    { key: "qty", label: "Кол.", w: 10, align: "right" },
-    { key: "wt", label: "Вес, кг", w: 14, align: "right" },
-    { key: "tot", label: "Итого, ₽", w: cw - 7 - 42 - 22 - 12 - 10 - 16 - 16 - 10 - 14, align: "right" }
+    { key: "n", label: "№", w: 6, align: "center" },
+    { key: "name", label: "Наименование", w: 46, align: "left" },
+    { key: "mat", label: "Материал", w: 18, align: "left" },
+    { key: "th", label: "Толщ.", w: 10, align: "center" },
+    { key: "bnd", label: "Гиб.", w: 9, align: "center" },
+    { key: "fl", label: "Разв., мм", w: 14, align: "right" },
+    { key: "len", label: "Длина, мм", w: 14, align: "right" },
+    { key: "qty", label: "Кол.", w: 9, align: "right" },
+    { key: "wt", label: "Вес", w: 14, align: "right" },
+    { key: "tot", label: "Итого, ₽", w: cw - 6 - 46 - 18 - 10 - 9 - 14 - 14 - 9 - 14, align: "right" }
   ];
   const rowH = 7;
   const cellText = (key, it2, i2) => {
@@ -24656,11 +24711,11 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       case "n":
         return String(i2 + 1);
       case "name":
-        return (_a4 = it2.title) != null ? _a4 : "—";
+        return ((_a4 = it2.title) != null ? _a4 : "—").slice(0, 40);
       case "mat":
         return (_b3 = it2.material) != null ? _b3 : "—";
       case "th":
-        return it2.thickness ? `${it2.thickness} мм` : "—";
+        return it2.thickness ? `${String(it2.thickness).replace(".", ",")} мм` : "—";
       case "bnd":
         return it2.bends != null ? String(it2.bends) : "—";
       case "fl":
@@ -24670,7 +24725,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       case "qty":
         return fmt0$1(it2.qty);
       case "wt":
-        return fmt1(it2.weightBatch);
+        return fmtWeight(it2.weightBatch);
       case "tot":
         return fmt0$1(it2.total);
       default:
@@ -24752,7 +24807,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.setFontSize(9);
   pdf.rect(mx, y2, cw, rowH, "F");
   pdf.text("ИТОГО:", mx + cw - 60, y2 + 4.8, { align: "right" });
-  pdf.text(`${fmt1(tot.weight)} кг`, mx + 60, y2 + 4.8, { align: "right" });
+  pdf.text(fmtWeight(tot.weight), mx + 60, y2 + 4.8, { align: "right" });
   pdf.text(`${fmt0$1(tot.total)} ₽`, mx + cw - 2, y2 + 4.8, { align: "right" });
   pdf.setTextColor(0);
   y2 += rowH + 8;
@@ -25045,11 +25100,11 @@ async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__P
   };
   drawHeader();
   items.forEach((it2, i2) => {
-    var _a4, _b3;
+    var _a4, _b3, _c;
     const price = it2.qty > 0 ? it2.subtotal / it2.qty : 0;
     const rowData = [
       String(i2 + 1),
-      it2.title + (it2.profile && !it2.title.includes(it2.profile) ? ` · ${it2.profile}` : "") + (it2.note ? ` · ${it2.note}` : "") + (((_a4 = it2.laser) != null ? _a4 : 0) > 0 ? ` · лазерная резка ${((_b3 = it2.laserLengthM) != null ? _b3 : 0).toFixed(1)} м` : ""),
+      ((_a4 = it2.title) != null ? _a4 : "—").slice(0, 40) + (((_b3 = it2.laser) != null ? _b3 : 0) > 0 ? ` · лазер ${((_c = it2.laserLengthM) != null ? _c : 0).toFixed(1).replace(".", ",")} м` : ""),
       fmt0(it2.qty),
       "шт.",
       fmt2(price),
@@ -25225,9 +25280,27 @@ function NumberField({
     }
   );
 }
+function Block({
+  n,
+  title,
+  hint,
+  children
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 flex items-center gap-3 border-b border-slate-100 pb-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 font-mono text-[13px] font-bold text-white", children: n }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[14px] font-bold tracking-wide text-slate-800 uppercase", children: title }),
+        hint && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 text-[11px] text-slate-400", children: hint })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children })
+  ] });
+}
 function ManualTab({ input, onChange, onAdd, added }) {
   var _a3, _b2, _c, _d;
   const prof = PROFILES.find((p2) => p2.id === input.profileId);
+  const mat = MATERIALS.find((m2) => m2.id === input.materialId);
   const setFlange = (i2, v2) => {
     const flanges = [...input.flanges];
     flanges[i2] = Math.max(1, Math.min(2e3, v2));
@@ -25240,10 +25313,10 @@ function ManualTab({ input, onChange, onAdd, added }) {
   };
   const method = (_a3 = input.bendMethod) != null ? _a3 : "air";
   const displayR = method === "coining" ? input.thickness : innerRadiusFromV(input.vMatrix);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-6 lg:grid-cols-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Block, { n: 1, title: "Материал и толщина", hint: "Листовой металл для гибки", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-4 sm:grid-cols-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Материал" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Тип металла" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "select",
           {
@@ -25252,27 +25325,44 @@ function ManualTab({ input, onChange, onAdd, added }) {
             onChange: (e) => onChange({ materialId: e.target.value }),
             children: MATERIALS.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m2.id, children: m2.name }, m2.id))
           }
-        )
+        ),
+        mat && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1.5 space-y-0.5 text-[11px] text-slate-500", children: [
+          mat.spec && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-mono text-[10px] leading-tight text-slate-400", children: mat.spec }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            "Rm = ",
+            mat.rm,
+            " МПа · ρ = ",
+            mat.density,
+            " кг/м³ · ",
+            mat.price,
+            " ₽/кг"
+          ] })
+        ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
-          "Толщина листа ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "мм" })
+          "Толщина листа, мм ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "стрелками ↕" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1.5", children: THICKNESSES.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "select",
           {
-            type: "button",
-            onClick: () => onChange({ thickness: t2, vMatrix: recommendedV(t2) }),
-            className: `min-w-11 rounded-lg border px-2.5 py-2 font-mono text-[13px] font-bold transition ${input.thickness === t2 ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50"}`,
-            children: String(t2).replace(".", ",")
-          },
-          t2
-        )) })
-      ] }),
+            className: "field",
+            value: input.thickness,
+            onChange: (e) => onChange({ thickness: Number(e.target.value), vMatrix: recommendedV(Number(e.target.value)) }),
+            children: THICKNESSES.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: t2, children: [
+              String(t2).replace(".", ","),
+              " мм"
+            ] }, t2))
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1.5 text-[11px] text-slate-500", children: "Доступно 0,5 – 2 мм (по памятке производства)" })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(Block, { n: 2, title: "Профиль сечения", hint: "Форма детали и размеры", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Профиль сечения" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-5 gap-1.5", children: PROFILES.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Тип профиля" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-3 gap-1.5 sm:grid-cols-5", children: PROFILES.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             type: "button",
@@ -25281,7 +25371,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
               flanges: [...p2.flanges],
               angles: p2.flanges.map(() => 90)
             }),
-            className: `rounded-lg border px-1 py-2.5 text-[11px] font-semibold transition ${input.profileId === p2.id ? "border-amber-500 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(245,158,11,0.15)]" : "border-slate-300 bg-white text-slate-500 hover:border-slate-400"}`,
+            className: `rounded-lg border px-2 py-2.5 text-[11px] font-semibold transition ${input.profileId === p2.id ? "border-amber-500 bg-amber-50 text-amber-800 shadow-[0_0_0_3px_rgba(245,158,11,0.15)]" : "border-slate-300 bg-white text-slate-500 hover:border-slate-400"}`,
             children: [
               p2.name,
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block font-mono text-[10px] font-bold text-slate-400", children: p2.closed ? `${p2.flanges.length} гиба` : p2.flanges.length === 2 ? "1 гиб" : `${p2.flanges.length - 1} гиба` })
@@ -25292,8 +25382,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
-          "Полки (внешние размеры)",
-          " ",
+          "Полки ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "мм · по ходу контура" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: prof.flanges.map((_2, i2) => {
@@ -25319,7 +25408,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
           "Углы гиба ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "° · для каждого гиба" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "°" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: Array.from({ length: prof.turns.length }).map((_2, i2) => {
           var _a4;
@@ -25341,57 +25430,11 @@ function ManualTab({ input, onChange, onAdd, added }) {
             )
           ] }, i2);
         }) })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
-          "Название детали ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "для спецификации" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "text",
-            className: "field",
-            placeholder: "Например: Кронштейн двери",
-            value: input.detailName,
-            onChange: (e) => onChange({ detailName: e.target.value })
-          }
-        )
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Длина изделия, мм" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              value: input.length,
-              onChange: (v2) => onChange({ length: v2 }),
-              step: 10,
-              min: 10,
-              max: 2490
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Количество, шт" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            NumberField,
-            {
-              value: input.quantity,
-              onChange: (v2) => onChange({ quantity: v2 }),
-              step: 1,
-              min: 1
-            }
-          )
-        ] })
-      ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(Block, { n: 3, title: "Технология гибки", hint: "Метод, матрица, длина", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
-          "Метод гибки ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "влияет на R и развёртку" })
-        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Метод гибки" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1.5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
@@ -25400,7 +25443,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
               onClick: () => onChange({ bendMethod: "air" }),
               className: `flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition ${method === "air" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"}`,
               children: [
-                "Воздушная",
+                "Воздушная ",
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 font-mono text-[10px] opacity-80", children: "R = 0,16·V" })
               ]
             }
@@ -25412,7 +25455,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
               onClick: () => onChange({ bendMethod: "coining" }),
               className: `flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition ${method === "coining" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"}`,
               children: [
-                "Калибровка",
+                "Калибровка ",
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 font-mono text-[10px] opacity-80", children: "R = t" })
               ]
             }
@@ -25466,29 +25509,33 @@ function ManualTab({ input, onChange, onAdd, added }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Металл, ₽/кг" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Длина изделия, мм" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             NumberField,
             {
-              value: input.metalPrice,
-              onChange: (v2) => onChange({ metalPrice: v2 }),
-              step: 0.5
+              value: input.length,
+              onChange: (v2) => onChange({ length: v2 }),
+              step: 10,
+              min: 10,
+              max: 2490
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Гиб, ₽/м" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Количество, шт" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             NumberField,
             {
-              value: input.pricePerMeter,
-              onChange: (v2) => onChange({ pricePerMeter: v2 }),
+              value: input.quantity,
+              onChange: (v2) => onChange({ quantity: v2 }),
               step: 1,
-              min: 0
+              min: 1
             }
           )
         ] })
-      ] }),
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(Block, { n: 4, title: "Операции", hint: "Лазерная резка и гибка", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-200 bg-amber-50/50 p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 flex items-center justify-between", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-[12px] font-bold text-slate-700", children: [
@@ -25501,7 +25548,7 @@ function ManualTab({ input, onChange, onAdd, added }) {
                 className: "h-4 w-4 accent-amber-600"
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "🔦 Лазерная резка" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "🔦 Лазерная резка контура" })
           ] }),
           input.laserEnabled && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-800", children: "включена" })
         ] }),
@@ -25539,6 +25586,70 @@ function ManualTab({ input, onChange, onAdd, added }) {
           ] })
         ] })
       ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-slate-50/50 p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 flex items-center gap-2 text-[12px] font-bold text-slate-700", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "🔨 Гибка на прессе" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "rounded-full bg-slate-200 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-600", children: [
+            prof.closed ? prof.flanges.length : prof.flanges.length - 1,
+            " гибов"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Цена гибки, ₽/м" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              value: input.pricePerMeter,
+              onChange: (v2) => onChange({ pricePerMeter: v2 }),
+              step: 1,
+              min: 0
+            }
+          )
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(Block, { n: 5, title: "Стоимость и заказчик", hint: "Цена металла, наладка, контакты", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Металл, ₽/кг" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              value: input.metalPrice,
+              onChange: (v2) => onChange({ metalPrice: v2 }),
+              step: 0.5
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Наладка, ₽" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            NumberField,
+            {
+              value: input.setupCost,
+              onChange: (v2) => onChange({ setupCost: v2 }),
+              step: 10,
+              min: 0
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "label", children: [
+          "Название детали ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint", children: "для спецификации" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            className: "field",
+            placeholder: "Например: Кронштейн двери",
+            value: input.detailName,
+            onChange: (e) => onChange({ detailName: e.target.value })
+          }
+        )
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-slate-50/70 p-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-3 text-[11px] font-bold tracking-[0.08em] text-slate-400 uppercase", children: "Контактные данные для сметы" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-3 sm:grid-cols-3", children: [
@@ -25573,17 +25684,17 @@ function ManualTab({ input, onChange, onAdd, added }) {
             }
           )
         ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: onAdd,
-          className: `w-full rounded-xl px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition active:scale-[0.99] ${added ? "bg-emerald-600 shadow-emerald-600/25 hover:bg-emerald-700" : "bg-amber-600 shadow-amber-600/25 hover:bg-amber-700"}`,
-          children: added ? "✓ Добавлено в смету" : "+ Добавить позицию в смету"
-        }
-      )
-    ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: onAdd,
+        className: `w-full rounded-xl px-6 py-3.5 text-[15px] font-bold text-white shadow-lg transition active:scale-[0.99] ${added ? "bg-emerald-600 shadow-emerald-600/25 hover:bg-emerald-700" : "bg-amber-600 shadow-amber-600/25 hover:bg-amber-700"}`,
+        children: added ? "✓ Добавлено в смету" : "+ Добавить позицию в смету"
+      }
+    )
   ] });
 }
 class DxfArrayScanner {
@@ -56140,7 +56251,7 @@ function GeoCard({
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-2 sm:grid-cols-4", children: [
         { l: "Развёртка", v: `${n1(p2.flatMm)} мм` },
         { l: "Гибов", v: String(p2.nBends) },
-        { l: "Вес шт.", v: `${n1(ev.weightPiece)} кг` },
+        { l: "Вес шт.", v: fmtWeightText(ev.weightPiece) },
         { l: "Усилие", v: `${n1(ev.forceTon)} т` }
       ].map((c2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[9.5px] font-bold tracking-wide text-slate-400 uppercase", children: c2.l }),
@@ -56162,8 +56273,7 @@ function GeoCard({
             " · НДС ",
             money(ev.cost.vat),
             " · ",
-            n1(ev.weightBatch),
-            " кг"
+            fmtWeightText(ev.weightBatch)
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-right", children: [
@@ -56455,42 +56565,36 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Металл ₽/кг" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field",
                 value: tech.metalPrice,
+                onChange: (v2) => onTech({ metalPrice: v2 }),
                 min: 0,
-                step: 0.5,
-                onChange: (e) => onTech({ metalPrice: Number(e.target.value) })
+                step: 0.5
               }
             )
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Гиб ₽/м" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field",
                 value: tech.pricePerMeter,
+                onChange: (v2) => onTech({ pricePerMeter: v2 }),
                 min: 0,
-                step: 1,
-                onChange: (e) => onTech({ pricePerMeter: Number(e.target.value) })
+                step: 1
               }
             )
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Наладка ₽" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
+              NumberField,
               {
-                type: "number",
-                className: "field",
                 value: tech.setupCost,
+                onChange: (v2) => onTech({ setupCost: v2 }),
                 min: 0,
-                step: 10,
-                onChange: (e) => onTech({ setupCost: Number(e.target.value) })
+                step: 10
               }
             )
           ] })
@@ -57015,7 +57119,7 @@ function Results({ input, result, geom }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Усилие гибки", value: fmt(result.forceTon), unit: "т", sub: `${fmt0$2(result.forceKN)} кН · 1.33·Rm·t²·L/V` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "V-матрица", value: fmt(input.vMatrix), unit: "мм", sub: `R внутр. = ${fmt2$1(result.innerRadius)} мм`, accent: true }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес детали", value: fmt2$1(result.weightPiece), unit: "кг", sub: `${mat.short} · ${mat.density} кг/м³` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес партии", value: fmt(result.weightBatch), unit: "кг", sub: `${fmt0$2(input.quantity)} шт × ${fmt2$1(result.weightPiece)} кг` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Вес партии", value: fmtWeightText(result.weightBatch).replace(" кг", "").replace(" г", ""), unit: result.weightBatch < 0.1 ? "г" : "кг", sub: `${fmt0$2(input.quantity)} шт × ${fmt2$1(result.weightPiece)} кг` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Гибов", value: String(result.nBends), sub: `углы ${input.angles.slice(0, result.nBends).map((a2) => a2 + "°").join(" / ")}` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Мин. полка", value: String(result.minFlange), unit: "мм", sub: `для V=${fmt(input.vMatrix)} мм` }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { label: "Рекоменд. пресс", value: fmt(result.recommendedPress), unit: "т", sub: `задан: ${input.pressTon} т` })
@@ -57092,10 +57196,7 @@ function PosRow({ p: p2 }) {
       fmt0$2(p2.qty),
       " шт"
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "hidden font-mono text-[11px] font-bold text-slate-500 sm:block", children: [
-      fmt(p2.weightKg),
-      " кг"
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden font-mono text-[11px] font-bold text-slate-500 sm:block", children: fmtWeightText(p2.weightKg) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 font-mono text-[12.5px] font-bold text-slate-900", children: fmtMoney(p2.total) })
   ] });
 }
@@ -57143,7 +57244,7 @@ function SummaryPanel({ summary }) {
           [
             { l: "Позиций", v: String(summary.positions.length) },
             { l: "Штук в партии", v: fmt0$2(t2.qty) },
-            { l: "Вес металла", v: `${fmt(t2.weightKg)} кг` },
+            { l: "Вес металла", v: fmtWeightText(t2.weightKg) },
             { l: "Без НДС", v: fmtMoney(t2.subtotal) },
             { l: `НДС ${Math.round(VAT_RATE * 100)} %`, v: fmtMoney(t2.vat) }
           ].map((r) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between text-[12.5px]", children: [
@@ -57180,7 +57281,7 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onExportInvoice, onP
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Развёртка" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Длина" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Кол-во" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Вес, кг" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Вес" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Металл" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "border-b border-slate-200 px-3 py-2.5", children: "Гибка" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2 text-right text-[11px] font-bold tracking-wider text-slate-500 uppercase whitespace-nowrap", children: "Резка" }),
@@ -57208,7 +57309,7 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onExportInvoice, onP
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.flat ? `${fmt0$2(it2.flat)}` : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: it2.length ? `${fmt0$2(it2.length)}` : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: fmt0$2(it2.qty) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: fmt(it2.weightBatch) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono", children: fmtWeightText(it2.weightBatch) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap", children: fmtMoney0(it2.metal) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap", children: fmtMoney0(it2.bending) }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "border-b border-slate-100 px-3 py-2.5 font-mono whitespace-nowrap text-slate-500", children: ((_b2 = it2.laser) != null ? _b2 : 0) > 0 ? fmtMoney0(it2.laser) : "—" }),
@@ -57228,7 +57329,7 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onExportInvoice, onP
         }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "bg-slate-900 text-white", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 text-right font-bold", colSpan: 8, children: "ИТОГО:" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold", children: fmt(tot.weight) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold", children: fmtWeightText(tot.weight) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: fmtMoney0(tot.metal) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: fmtMoney0(tot.bending) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-3 font-mono font-bold whitespace-nowrap", children: ((_a3 = tot.laser) != null ? _a3 : 0) > 0 ? fmtMoney0(tot.laser) : "—" }),
@@ -57277,8 +57378,372 @@ function CartTable({ items, onRemove, onClear, onExportPdf, onExportInvoice, onP
     ] })
   ] });
 }
-const nf1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
-const fmtW = (v2) => nf1.format(v2);
+function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h) {
+  const pieces = [];
+  const unplaced = [];
+  for (const p2 of parts) {
+    for (let i2 = 0; i2 < p2.qty; i2++) {
+      let w2 = p2.width, h2 = p2.height, rot2 = false;
+      if (h2 > sheetH && w2 <= sheetH) {
+        [w2, h2] = [h2, w2];
+        rot2 = true;
+      }
+      if (w2 > sheetW || h2 > sheetH) {
+        if (!unplaced.find((u2) => u2.id === p2.id)) unplaced.push(p2);
+        continue;
+      }
+      pieces.push({ part: p2, w: w2, h: h2, rot: rot2 });
+    }
+  }
+  pieces.sort((a2, b2) => b2.h - a2.h || b2.w - a2.w);
+  const sheets = [];
+  const GAP = 2;
+  for (const piece of pieces) {
+    let placed = false;
+    for (const sheet of sheets) {
+      const shelves = [];
+      for (const q2 of sheet.placed) {
+        let s2 = shelves.find((sh) => sh.y === q2.y);
+        if (!s2) {
+          s2 = { y: q2.y, h: q2.h, usedX: 0 };
+          shelves.push(s2);
+        }
+        s2.usedX = Math.max(s2.usedX, q2.x + q2.w + GAP);
+        s2.h = Math.max(s2.h, q2.h);
+      }
+      for (const s2 of shelves) {
+        if (piece.h <= s2.h && s2.usedX + piece.w <= sheetW) {
+          sheet.placed.push({ ...piece.part, x: s2.usedX, y: s2.y, rot: piece.rot, w: piece.w, h: piece.h });
+          sheet.usedArea += piece.w * piece.h;
+          placed = true;
+          break;
+        }
+      }
+      if (placed) break;
+      const nextY = sheet.placed.length === 0 ? 0 : Math.max(...sheet.placed.map((q2) => q2.y + q2.h)) + GAP;
+      if (nextY + piece.h <= sheetH && piece.w <= sheetW) {
+        sheet.placed.push({ ...piece.part, x: 0, y: nextY, rot: piece.rot, w: piece.w, h: piece.h });
+        sheet.usedArea += piece.w * piece.h;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const sheet = { index: sheets.length + 1, placed: [], usedArea: 0 };
+      sheet.placed.push({ ...piece.part, x: 0, y: 0, rot: piece.rot, w: piece.w, h: piece.h });
+      sheet.usedArea = piece.w * piece.h;
+      sheets.push(sheet);
+    }
+  }
+  const totalArea = sheets.length * sheetW * sheetH;
+  const usedArea = sheets.reduce((s2, sh) => s2 + sh.usedArea, 0);
+  return {
+    sheets,
+    sheetCount: sheets.length,
+    utilization: totalArea > 0 ? usedArea / totalArea : 0,
+    sheetW,
+    sheetH,
+    unplaced
+  };
+}
+const COLORS$1 = [
+  "#f59e0b",
+  "#ef4444",
+  "#3b82f6",
+  "#10b981",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#84cc16",
+  "#f97316",
+  "#6366f1"
+];
+function NestingView({ parts }) {
+  const result = reactExports.useMemo(() => nestOnSheets(parts), [parts]);
+  if (parts.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500", children: "Добавьте детали — покажу раскрой листов 2500×1250" });
+  }
+  const scale = 0.18;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3 sm:grid-cols-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-300 bg-amber-50/70 p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-amber-800/70", children: "Листов" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 font-mono text-[22px] font-bold text-amber-900", children: result.sheetCount })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-slate-500", children: "Использование" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 font-mono text-[22px] font-bold text-emerald-700", children: [
+          (result.utilization * 100).toFixed(1),
+          " %"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-slate-500", children: "Деталей" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 font-mono text-[22px] font-bold text-slate-900", children: parts.reduce((s2, p2) => s2 + p2.qty, 0) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-slate-500", children: "Лист" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 font-mono text-[14px] font-bold text-slate-900", children: [
+          result.sheetW,
+          " × ",
+          result.sheetH
+        ] })
+      ] })
+    ] }),
+    result.unplaced.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-red-300 bg-red-50 p-3 text-[12px] text-red-800", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "⛔ Не размещено на листе:" }),
+      " ",
+      result.unplaced.map((u2) => `${u2.title} (${u2.width}×${u2.height} мм)`).join(", "),
+      ". Размер превышает габариты листа ",
+      result.sheetW,
+      "×",
+      result.sheetH,
+      "."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-4 lg:grid-cols-2", children: result.sheets.map((sheet) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-[11px] font-bold uppercase tracking-wider text-slate-500", children: [
+          "Лист ",
+          sheet.index,
+          " / ",
+          result.sheetCount
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "font-mono text-[10px] text-slate-400", children: [
+          sheet.placed.length,
+          " дет."
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "relative rounded-lg bg-slate-100",
+          style: {
+            width: result.sheetW * scale,
+            height: result.sheetH * scale,
+            border: "1px solid #cbd5e1"
+          },
+          children: sheet.placed.map((p2, i2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: "absolute rounded-[2px] text-[8px] font-bold text-white",
+              style: {
+                left: p2.x * scale,
+                top: p2.y * scale,
+                width: p2.w * scale,
+                height: p2.h * scale,
+                backgroundColor: COLORS$1[i2 % COLORS$1.length],
+                border: "1px solid rgba(0,0,0,0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden"
+              },
+              title: `${p2.title} · ${p2.w}×${p2.h} мм`,
+              children: p2.w * scale > 20 && p2.h * scale > 12 ? p2.title.slice(0, 6) : ""
+            },
+            i2
+          ))
+        }
+      )
+    ] }, sheet.index)) })
+  ] });
+}
+function stockCutting(parts, stockLength = 6e3) {
+  const pieces = [];
+  for (const p2 of parts) {
+    for (let i2 = 0; i2 < p2.qty; i2++) {
+      pieces.push({ id: p2.id, title: p2.title, length: p2.length });
+    }
+  }
+  pieces.sort((a2, b2) => b2.length - a2.length);
+  const bars = [];
+  for (const piece of pieces) {
+    if (piece.length > stockLength) continue;
+    let placed = false;
+    for (const bar of bars) {
+      if (bar.usedLength + piece.length <= stockLength) {
+        bar.pieces.push({ partId: piece.id, title: piece.title, length: piece.length, offset: bar.usedLength });
+        bar.usedLength += piece.length;
+        bar.waste = stockLength - bar.usedLength;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      bars.push({
+        index: bars.length + 1,
+        pieces: [{ partId: piece.id, title: piece.title, length: piece.length, offset: 0 }],
+        usedLength: piece.length,
+        waste: stockLength - piece.length
+      });
+    }
+  }
+  const totalUsed = bars.reduce((s2, b2) => s2 + b2.usedLength, 0);
+  const totalWaste = bars.reduce((s2, b2) => s2 + b2.waste, 0);
+  return {
+    bars,
+    barCount: bars.length,
+    utilization: bars.length > 0 ? totalUsed / (bars.length * stockLength) : 0,
+    stockLength,
+    totalWaste
+  };
+}
+const COLORS = [
+  "#f59e0b",
+  "#ef4444",
+  "#3b82f6",
+  "#10b981",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#84cc16",
+  "#f97316",
+  "#6366f1"
+];
+function StockView({ parts }) {
+  const result = reactExports.useMemo(() => stockCutting(parts), [parts]);
+  if (parts.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500", children: "Добавьте профильные заготовки — покажу раскрой хлыстов 6 м" });
+  }
+  const scale = 0.1;
+  const partIds = Array.from(new Set(parts.map((p2) => p2.id)));
+  const colorOf = (id) => COLORS[partIds.indexOf(id) % COLORS.length];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3 sm:grid-cols-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-300 bg-amber-50/70 p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-amber-800/70", children: "Хлыстов" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 font-mono text-[22px] font-bold text-amber-900", children: result.barCount })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-slate-500", children: "Использование" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 font-mono text-[22px] font-bold text-emerald-700", children: [
+          (result.utilization * 100).toFixed(1),
+          " %"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-slate-500", children: "Заготовок" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 font-mono text-[22px] font-bold text-slate-900", children: parts.reduce((s2, p2) => s2 + p2.qty, 0) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-slate-500", children: "Остаток" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 font-mono text-[14px] font-bold text-slate-900", children: [
+          result.totalWaste,
+          " мм"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: result.bars.map((bar) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-2 flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-[11px] font-bold uppercase tracking-wider text-slate-500", children: [
+          "Хлыст ",
+          bar.index,
+          " / ",
+          result.barCount
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "font-mono text-[10px] text-slate-400", children: [
+          bar.pieces.length,
+          " заг. · использовано ",
+          bar.usedLength,
+          " мм · остаток ",
+          bar.waste,
+          " мм"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "relative h-8 rounded overflow-hidden border border-slate-300 bg-slate-100",
+          style: { width: result.stockLength * scale },
+          children: [
+            bar.pieces.map((p2, i2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "div",
+              {
+                className: "absolute top-0 bottom-0 flex items-center justify-center text-[9px] font-bold text-white",
+                style: {
+                  left: p2.offset * scale,
+                  width: p2.length * scale,
+                  backgroundColor: colorOf(p2.partId),
+                  borderRight: "1px solid rgba(0,0,0,0.2)",
+                  overflow: "hidden",
+                  padding: "0 2px",
+                  whiteSpace: "nowrap"
+                },
+                title: `${p2.title} · ${p2.length} мм`,
+                children: p2.length * scale > 30 ? p2.length : ""
+              },
+              i2
+            )),
+            bar.waste > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "div",
+              {
+                className: "absolute top-0 bottom-0 flex items-center justify-center text-[9px] font-bold text-slate-500",
+                style: {
+                  left: bar.usedLength * scale,
+                  width: bar.waste * scale,
+                  backgroundColor: "#e2e8f0",
+                  borderLeft: "1px dashed #94a3b8"
+                },
+                children: bar.waste * scale > 30 ? `остаток ${bar.waste}` : ""
+              }
+            )
+          ]
+        }
+      )
+    ] }, bar.index)) })
+  ] });
+}
+function CuttingTab({ items }) {
+  const [sub, setSub] = reactExports.useState("sheets");
+  const sheetParts = reactExports.useMemo(
+    () => items.filter((it2) => it2.flat && it2.length).map((it2, i2) => ({
+      id: it2.id || `part-${i2}`,
+      title: it2.title,
+      width: it2.flat,
+      height: it2.length,
+      qty: it2.qty
+    })),
+    [items]
+  );
+  const stockParts = reactExports.useMemo(
+    () => items.filter((it2) => it2.length).map((it2, i2) => ({
+      id: it2.id || `stock-${i2}`,
+      title: it2.title,
+      length: it2.length,
+      qty: it2.qty
+    })),
+    [items]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => setSub("sheets"),
+          className: `rounded-lg px-4 py-2 text-[13px] font-bold transition ${sub === "sheets" ? "bg-amber-500 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"}`,
+          children: "📄 Листы 2500×1250"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => setSub("stocks"),
+          className: `rounded-lg px-4 py-2 text-[13px] font-bold transition ${sub === "stocks" ? "bg-amber-500 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"}`,
+          children: "📏 Хлысты 6 м"
+        }
+      )
+    ] }),
+    items.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500", children: "Добавьте позиции в смету — покажу раскрой на листах и хлыстах" }) : sub === "sheets" ? /* @__PURE__ */ jsxRuntimeExports.jsx(NestingView, { parts: sheetParts }) : /* @__PURE__ */ jsxRuntimeExports.jsx(StockView, { parts: stockParts })
+  ] });
+}
+const nf1 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtW = (v2) => {
+  const abs = Math.abs(v2);
+  if (abs > 0 && abs < 0.1) return v2.toFixed(3).replace(".", ",");
+  return nf1.format(v2);
+};
 const td = {
   border: "1px solid #cbd5e1",
   padding: "3px 4px",
@@ -57337,8 +57802,7 @@ function ReportPrint({ items, date }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, fontSize: 16 }, children: items.length }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { color: "#475569" }, children: [
           "общий вес партии: ",
-          fmtW(tot.weight),
-          " кг"
+          tot.weight > 0 && tot.weight < 0.1 ? `${(tot.weight * 1e3).toFixed(1).replace(".", ",")} г` : `${fmtW(tot.weight)} кг`
         ] })
       ] })
     ] }),
@@ -57352,7 +57816,7 @@ function ReportPrint({ items, date }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Разв." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Длина" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Кол." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Вес, кг" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Вес" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Металл" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Гибка" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Резка" }),
@@ -57370,16 +57834,11 @@ function ReportPrint({ items, date }) {
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: i2 + 1 }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { style: { ...td, whiteSpace: "normal", minWidth: 140 }, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700 }, children: it2.title }),
-              it2.files && it2.files.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { color: "#64748b", fontSize: 10 }, children: [
-                "Файл: ",
-                it2.files.join("; ")
-              ] }),
-              it2.note && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "#64748b", fontSize: 10 }, children: it2.note }),
-              it2.profile && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "#94a3b8", fontSize: 9 }, children: it2.profile })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, wordBreak: "break-word", maxWidth: 180 }, children: (it2.title || "").length > 40 ? (it2.title || "").slice(0, 38) + "…" : it2.title }),
+              (it2.profile || it2.note) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { color: "#94a3b8", fontSize: 9, marginTop: 2 }, children: [it2.profile, it2.note].filter(Boolean).join(" · ").slice(0, 70) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.material }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.thickness ? `${it2.thickness} мм` : "—" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.thickness ? `${String(it2.thickness).replace(".", ",")} мм` : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: (_a4 = it2.bends) != null ? _a4 : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.flat ? `${fmt0$2(it2.flat)} мм` : "—" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: it2.length ? `${fmt0$2(it2.length)} мм` : "—" }),
@@ -57479,7 +57938,12 @@ const DEFAULT_INPUT = {
 function loadCart() {
   var _a3;
   try {
-    return JSON.parse((_a3 = localStorage.getItem("fireprom-cart")) != null ? _a3 : "[]");
+    const raw = JSON.parse((_a3 = localStorage.getItem("fireprom-cart")) != null ? _a3 : "[]");
+    if (!Array.isArray(raw)) return [];
+    return raw.map((it2) => ({
+      ...it2,
+      title: shortName(it2.title || "")
+    }));
   } catch {
     return [];
   }
@@ -57663,7 +58127,7 @@ function App() {
         },
         id
       )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "no-print animate-fadein rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7", children: tab === "manual" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ManualTab, { input, onChange: patch, onAdd: addCalcPosition, added }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "no-print animate-fadein rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7", children: tab === "cutting" ? /* @__PURE__ */ jsxRuntimeExports.jsx(CuttingTab, { items: cart.length > 0 ? cart : reportItems }) : tab === "manual" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ManualTab, { input, onChange: patch, onAdd: addCalcPosition, added }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
         FilesTab,
         {
           files,
@@ -57751,4 +58215,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-1-9-Xjr-.js.map
+//# sourceMappingURL=index-BW1q4MhE.js.map
