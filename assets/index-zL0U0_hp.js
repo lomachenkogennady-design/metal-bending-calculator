@@ -13037,6 +13037,42 @@ function fmtWeightText(v2) {
   if (n > 0 && n < 0.1) return `${(n * 1e3).toFixed(1).replace(".", ",")} г`;
   return `${n.toFixed(2).replace(".", ",")} кг`;
 }
+function stripPartSuffix(t2) {
+  return (t2 || "").replace(/\s*·\s*деталь\s*\d+\s*$/i, "").replace(/\s*·\s*[А-ЯA-Z]\s*$/i, "").trim();
+}
+function groupItems(items) {
+  var _a3, _b2, _c, _d, _e2, _f, _g, _h, _i, _j, _k;
+  const groups = /* @__PURE__ */ new Map();
+  for (const it2 of items) {
+    const key = [
+      (_a3 = it2.material) != null ? _a3 : "",
+      (_b2 = it2.thickness) != null ? _b2 : 0,
+      Math.round(((_c = it2.flat) != null ? _c : 0) * 10),
+      Math.round(((_d = it2.length) != null ? _d : 0) * 10),
+      (_e2 = it2.bends) != null ? _e2 : 0
+    ].join("|");
+    const ex = groups.get(key);
+    if (ex) {
+      ex.qty += it2.qty;
+      ex.weightBatch = Math.round((ex.weightBatch + it2.weightBatch) * 1e3) / 1e3;
+      ex.metal += it2.metal;
+      ex.bending += it2.bending;
+      ex.laser = ((_f = ex.laser) != null ? _f : 0) + ((_g = it2.laser) != null ? _g : 0);
+      ex.laserLengthM = Math.round((((_h = ex.laserLengthM) != null ? _h : 0) + ((_i = it2.laserLengthM) != null ? _i : 0)) * 100) / 100;
+      ex.laserPierceCount = ((_j = ex.laserPierceCount) != null ? _j : 0) + ((_k = it2.laserPierceCount) != null ? _k : 0);
+      ex.subtotal += it2.subtotal;
+      ex.vat += it2.vat;
+      ex.total += it2.total;
+      if (it2.setup > ex.setup) ex.setup = it2.setup;
+    } else {
+      groups.set(key, {
+        ...it2,
+        title: stripPartSuffix(it2.title)
+      });
+    }
+  }
+  return Array.from(groups.values());
+}
 function buildSummary(opts) {
   var _a3, _b2, _c, _d, _e2, _f, _g, _h, _i, _j, _k, _l, _m;
   const manualPositions = [];
@@ -23923,7 +23959,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DEMPWY-6.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BY3rm-EF.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24642,87 +24678,127 @@ function pruneFree(free) {
     }
   }
 }
-function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h) {
+function splitFreeAgainst(free, placed) {
+  const out = [];
+  for (const fr of free) {
+    if (placed.x >= fr.x + fr.w || placed.x + placed.w <= fr.x || placed.y >= fr.y + fr.h || placed.y + placed.h <= fr.y) {
+      out.push(fr);
+      continue;
+    }
+    if (placed.y > fr.y) {
+      out.push({ x: fr.x, y: fr.y, w: fr.w, h: placed.y - fr.y });
+    }
+    if (placed.y + placed.h < fr.y + fr.h) {
+      out.push({ x: fr.x, y: placed.y + placed.h, w: fr.w, h: fr.y + fr.h - (placed.y + placed.h) });
+    }
+    if (placed.x > fr.x) {
+      const y0 = Math.max(fr.y, placed.y);
+      const y1 = Math.min(fr.y + fr.h, placed.y + placed.h);
+      if (y1 > y0) out.push({ x: fr.x, y: y0, w: placed.x - fr.x, h: y1 - y0 });
+    }
+    if (placed.x + placed.w < fr.x + fr.w) {
+      const y0 = Math.max(fr.y, placed.y);
+      const y1 = Math.min(fr.y + fr.h, placed.y + placed.h);
+      if (y1 > y0) out.push({ x: placed.x + placed.w, y: y0, w: fr.x + fr.w - (placed.x + placed.w), h: y1 - y0 });
+    }
+  }
+  return out.filter((r) => r.w > 1e-3 && r.h > 1e-3);
+}
+function runOnce(pieces, innerW, innerH, margin, gap, sortFn, fitMode) {
+  const sorted = [...pieces].sort(sortFn);
+  const sheets = [];
+  for (const { part } of sorted) {
+    let bestSheet = -1, bestRectIdx = -1, bestRot = false;
+    let bestScore1 = Infinity, bestScore2 = Infinity;
+    for (let si = 0; si < sheets.length; si++) {
+      const free = sheets[si].free;
+      for (let ri = 0; ri < free.length; ri++) {
+        const fr2 = free[ri];
+        const candidates = [];
+        if (part.width <= fr2.w && part.height <= fr2.h) candidates.push([part.width, part.height, false]);
+        if (part.height <= fr2.w && part.width <= fr2.h) candidates.push([part.height, part.width, true]);
+        for (const [pw2, ph2, rot2] of candidates) {
+          const lw = fr2.w - pw2;
+          const lh = fr2.h - ph2;
+          let s1, s2;
+          if (fitMode === "bssf") {
+            s1 = Math.min(lw, lh);
+            s2 = Math.max(lw, lh);
+          } else {
+            s1 = lw * lh;
+            s2 = Math.min(lw, lh);
+          }
+          if (s1 < bestScore1 || s1 === bestScore1 && s2 < bestScore2) {
+            bestSheet = si;
+            bestRectIdx = ri;
+            bestRot = rot2;
+            bestScore1 = s1;
+            bestScore2 = s2;
+          }
+        }
+      }
+    }
+    if (bestSheet === -1) {
+      sheets.push({ placed: [], free: [{ x: margin, y: margin, w: innerW, h: innerH }] });
+      bestSheet = sheets.length - 1;
+      bestRectIdx = 0;
+      bestRot = !(part.width <= innerW && part.height <= innerH);
+    }
+    const sheet = sheets[bestSheet];
+    const fr = sheet.free[bestRectIdx];
+    const pw = bestRot ? part.height : part.width;
+    const ph = bestRot ? part.width : part.height;
+    const px = fr.x;
+    const py = fr.y;
+    sheet.placed.push({ ...part, x: px, y: py, rot: bestRot, w: pw, h: ph });
+    const reserved = { x: px, y: py, w: pw + gap, h: ph + gap };
+    sheet.free = splitFreeAgainst(sheet.free, reserved);
+    pruneFree(sheet.free);
+  }
+  return { sheets, sheetCount: sheets.length };
+}
+function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h, gap = 3, margin = 5) {
+  var _a3, _b2;
+  const innerW = sheetW - margin * 2;
+  const innerH = sheetH - margin * 2;
   const pieces = [];
   const unplaced = [];
   for (const p2 of parts) {
-    const fitsN = p2.width <= sheetW && p2.height <= sheetH;
-    const fitsR = p2.height <= sheetW && p2.width <= sheetH;
+    const fitsN = p2.width <= innerW && p2.height <= innerH;
+    const fitsR = p2.height <= innerW && p2.width <= innerH;
     if (!fitsN && !fitsR) {
       if (!unplaced.find((u2) => u2.id === p2.id)) unplaced.push(p2);
       continue;
     }
     for (let i2 = 0; i2 < p2.qty; i2++) pieces.push({ part: p2 });
   }
-  pieces.sort((a2, b2) => {
-    const sa = a2.part.width * a2.part.height;
-    const sb = b2.part.width * b2.part.height;
-    return sb - sa;
-  });
-  const sheets = [];
-  for (const { part } of pieces) {
-    let bestSheet = -1, bestRectIdx = -1, bestRot = false;
-    let bestShort = Infinity, bestLong = Infinity;
-    for (let si = 0; si < sheets.length; si++) {
-      const free = sheets[si].free;
-      for (let ri = 0; ri < free.length; ri++) {
-        const fr2 = free[ri];
-        if (part.width <= fr2.w && part.height <= fr2.h) {
-          const lw = fr2.w - part.width, lh = fr2.h - part.height;
-          const short = Math.min(lw, lh), long = Math.max(lw, lh);
-          if (short < bestShort || short === bestShort && long < bestLong) {
-            bestSheet = si;
-            bestRectIdx = ri;
-            bestRot = false;
-            bestShort = short;
-            bestLong = long;
-          }
-        }
-        if (part.height <= fr2.w && part.width <= fr2.h) {
-          const lw = fr2.w - part.height, lh = fr2.h - part.width;
-          const short = Math.min(lw, lh), long = Math.max(lw, lh);
-          if (short < bestShort || short === bestShort && long < bestLong) {
-            bestSheet = si;
-            bestRectIdx = ri;
-            bestRot = true;
-            bestShort = short;
-            bestLong = long;
-          }
-        }
-      }
+  const strategies = [
+    { name: "area+bssf", sort: (a2, b2) => b2.part.width * b2.part.height - a2.part.width * a2.part.height, fit: "bssf" },
+    { name: "area+baf", sort: (a2, b2) => b2.part.width * b2.part.height - a2.part.width * a2.part.height, fit: "baf" },
+    { name: "height+bssf", sort: (a2, b2) => b2.part.height - a2.part.height || b2.part.width - a2.part.width, fit: "bssf" },
+    { name: "height+baf", sort: (a2, b2) => b2.part.height - a2.part.height || b2.part.width - a2.part.width, fit: "baf" },
+    { name: "width+bssf", sort: (a2, b2) => b2.part.width - a2.part.width || b2.part.height - a2.part.height, fit: "bssf" },
+    { name: "maxside+baf", sort: (a2, b2) => Math.max(b2.part.width, b2.part.height) - Math.max(a2.part.width, a2.part.height), fit: "baf" }
+  ];
+  let best = null;
+  for (const s2 of strategies) {
+    const r = runOnce(pieces, innerW, innerH, margin, gap, s2.sort, s2.fit);
+    const usedArea = r.sheets.reduce((sum, sh) => sum + sh.placed.reduce((s22, p2) => s22 + p2.w * p2.h, 0), 0);
+    const totalArea = r.sheetCount * sheetW * sheetH;
+    const util = totalArea > 0 ? usedArea / totalArea : 0;
+    if (!best || r.sheetCount < best.sheetCount || r.sheetCount === best.sheetCount && util > best.utilization) {
+      best = { sheets: r.sheets, sheetCount: r.sheetCount, utilization: util };
     }
-    if (bestSheet === -1) {
-      sheets.push({ placed: [], free: [{ x: 0, y: 0, w: sheetW, h: sheetH }] });
-      bestSheet = sheets.length - 1;
-      bestRectIdx = 0;
-      bestRot = !(part.width <= sheetW && part.height <= sheetH);
-    }
-    const sheet = sheets[bestSheet];
-    const fr = sheet.free[bestRectIdx];
-    const pw = bestRot ? part.height : part.width;
-    const ph = bestRot ? part.width : part.height;
-    const px = fr.x, py = fr.y;
-    sheet.placed.push({ ...part, x: px, y: py, rot: bestRot, w: pw, h: ph });
-    const newFree = [];
-    if (px + pw < fr.x + fr.w) newFree.push({ x: px + pw, y: fr.y, w: fr.x + fr.w - (px + pw), h: fr.h });
-    if (py + ph < fr.y + fr.h) newFree.push({ x: fr.x, y: py + ph, w: fr.w, h: fr.y + fr.h - (py + ph) });
-    if (px > fr.x) newFree.push({ x: fr.x, y: fr.y, w: px - fr.x, h: fr.h });
-    if (py > fr.y) newFree.push({ x: fr.x, y: fr.y, w: fr.w, h: py - fr.y });
-    sheet.free.splice(bestRectIdx, 1);
-    sheet.free.push(...newFree);
-    pruneFree(sheet.free);
   }
-  const resultSheets = sheets.map((sh, i2) => ({
+  const resultSheets = ((_a3 = best == null ? void 0 : best.sheets) != null ? _a3 : []).map((sh, i2) => ({
     index: i2 + 1,
     placed: sh.placed,
     usedArea: sh.placed.reduce((s2, p2) => s2 + p2.w * p2.h, 0)
   }));
-  const totalArea = resultSheets.length * sheetW * sheetH;
-  const usedArea = resultSheets.reduce((s2, sh) => s2 + sh.usedArea, 0);
   return {
     sheets: resultSheets,
     sheetCount: resultSheets.length,
-    utilization: totalArea > 0 ? usedArea / totalArea : 0,
+    utilization: (_b2 = best == null ? void 0 : best.utilization) != null ? _b2 : 0,
     sheetW,
     sheetH,
     unplaced
@@ -24750,7 +24826,8 @@ async function loadFontAsBase64(url) {
 }
 async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Date()) {
   var _a3, _b2, _c;
-  const tot = cartTotals(items);
+  const grouped = groupItems(items);
+  const tot = cartTotals(grouped);
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const pdf = new E("p", "mm", "a4");
   const [regularB64, boldB64] = await Promise.all([
@@ -24790,7 +24867,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   y2 += 5;
   pdf.setTextColor(80);
   pdf.text(`Контакт: ${client2.phone || "—"}${client2.email ? " · " + client2.email : ""}`, mx, y2);
-  pdf.text(`Позиций: ${items.length}  ·  вес партии: ${fmtWeight(tot.weight)}`, pageW - mx, y2, { align: "right" });
+  pdf.text(`Позиций: ${grouped.length}  ·  вес партии: ${fmtWeight(tot.weight)}`, pageW - mx, y2, { align: "right" });
   pdf.setTextColor(0);
   y2 += 8;
   const cols = [
@@ -24865,7 +24942,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
     }
   };
   drawHeader();
-  items.forEach((it2, i2) => {
+  grouped.forEach((it2, i2) => {
     ensureSpace(rowH);
     let x2 = mx;
     cols.forEach((c2) => {
@@ -24912,7 +24989,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   pdf.text(`${fmt0$1(tot.total)} ₽`, mx + cw - 2, y2 + 4.8, { align: "right" });
   pdf.setTextColor(0);
   y2 += rowH + 8;
-  const nestingParts = items.filter((it2) => it2.flat && it2.length).map((it2, i2) => ({
+  const nestingParts = grouped.filter((it2) => it2.flat && it2.length).map((it2, i2) => ({
     id: it2.id || `part-${i2}`,
     title: it2.title,
     width: it2.flat,
@@ -24979,10 +25056,11 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
       pdf.setFillColor(245, 247, 250);
       pdf.rect(sx, sy, sheetW_draw, sheetH_draw, "FD");
       sh.placed.forEach((part, pi) => {
-        const px = sx + part.x * scaleFactor;
-        const py = sy + part.y * scaleFactor;
-        const pw = part.w * scaleFactor;
-        const ph = part.h * scaleFactor;
+        const visGap = 0.4;
+        const px = sx + part.x * scaleFactor + visGap;
+        const py = sy + part.y * scaleFactor + visGap;
+        const pw = Math.max(0.5, part.w * scaleFactor - visGap * 2);
+        const ph = Math.max(0.5, part.h * scaleFactor - visGap * 2);
         const [r, g2, b2] = COLORS2[pi % COLORS2.length];
         pdf.setFillColor(r, g2, b2);
         pdf.setDrawColor(40, 50, 65);
@@ -25205,7 +25283,8 @@ async function loadFontBase64(url) {
 async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__PURE__ */ new Date()) {
   var _a3, _b2;
   const R2 = REQUISITES;
-  const tot = cartTotals(items);
+  const grouped = groupItems(items);
+  const tot = cartTotals(grouped);
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const pdf = new E("p", "mm", "a4");
   const [reg, bold] = await Promise.all([
@@ -25332,7 +25411,7 @@ async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__P
     pdf.setFontSize(9);
   };
   drawHeader();
-  items.forEach((it2, i2) => {
+  grouped.forEach((it2, i2) => {
     var _a4, _b3, _c;
     const price = it2.qty > 0 ? it2.subtotal / it2.qty : 0;
     const rowData = [
@@ -25372,7 +25451,7 @@ async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__P
   y2 += 4;
   pdf.setFont(F2, "normal");
   pdf.setFontSize(9);
-  pdf.text(`Всего наименований ${items.length}, на сумму ${fmt2(tot.total)} руб.`, mx, y2);
+  pdf.text(`Всего наименований ${grouped.length}, на сумму ${fmt2(tot.total)} руб.`, mx, y2);
   y2 += 5;
   pdf.setFont(F2, "bold");
   pdf.text(sumInWords(tot.total), mx, y2, { maxWidth: cw });
@@ -57955,10 +58034,10 @@ function NestingView({ parts }) {
             {
               className: "absolute rounded-[2px] text-[8px] font-bold text-white",
               style: {
-                left: p2.x * scale,
-                top: p2.y * scale,
-                width: p2.w * scale,
-                height: p2.h * scale,
+                left: p2.x * scale + 1,
+                top: p2.y * scale + 1,
+                width: Math.max(2, p2.w * scale - 2),
+                height: Math.max(2, p2.h * scale - 2),
                 backgroundColor: COLORS$1[i2 % COLORS$1.length],
                 border: "1px solid rgba(0,0,0,0.15)",
                 display: "flex",
@@ -58189,7 +58268,8 @@ const th = {
 };
 function ReportPrint({ items, date }) {
   var _a3, _b2, _c;
-  const tot = cartTotals(items);
+  const grouped = groupItems(items);
+  const tot = cartTotals(grouped);
   const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
   const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
   const num = `КГ-${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -58227,7 +58307,7 @@ function ReportPrint({ items, date }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1, minWidth: 220, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }, children: "Позиций в расчёте" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, fontSize: 16 }, children: items.length }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, fontSize: 16 }, children: grouped.length }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { color: "#475569" }, children: [
           "общий вес партии: ",
           tot.weight > 0 && tot.weight < 0.1 ? `${(tot.weight * 1e3).toFixed(1).replace(".", ",")} г` : `${fmtW(tot.weight)} кг`
@@ -58257,7 +58337,7 @@ function ReportPrint({ items, date }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { style: th, children: "Итого" })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("tbody", { children: [
-        items.map((it2, i2) => {
+        grouped.map((it2, i2) => {
           var _a4, _b3;
           return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { style: td, children: i2 + 1 }),
@@ -58710,4 +58790,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DJaPgpjt.js.map
+//# sourceMappingURL=index-zL0U0_hp.js.map
