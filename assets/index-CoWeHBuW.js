@@ -12544,7 +12544,10 @@ const MATERIALS = [
     price: 320
   }
 ];
-const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2];
+const THICKNESSES = Array.from(
+  { length: 46 },
+  (_2, i2) => Math.round((0.5 + i2 * 0.1) * 10) / 10
+);
 const WORKSHOP = {
   laser: {
     sheet: { w: 2500, h: 1250 },
@@ -12566,7 +12569,10 @@ const WORKSHOP = {
     maxDepthNarrow: 470,
     maxDepthNarrowWidth: 2e3,
     minThickness: 0.2,
-    maxThickness: 2,
+    maxThickness: 5,
+    // технический предел
+    standardMaxThickness: 2,
+    // стандартный диапазон, больше — по согласованию
     minFlange: 11,
     minClosedBend: 12
   }
@@ -12652,7 +12658,9 @@ function calculate(input) {
     warnings.push({ level: "warn", text: `Толщина ${t2} мм меньше минимальной для гибки (${W2.press.minThickness} мм).` });
   }
   if (t2 > W2.press.maxThickness) {
-    warnings.push({ level: "warn", text: `Гибка ${t2} мм превышает стандартную (${W2.press.maxThickness} мм) — по согласованию.` });
+    warnings.push({ level: "error", text: `Гибка ${t2} мм превышает предел производства (${W2.press.maxThickness} мм).` });
+  } else if (t2 > W2.press.standardMaxThickness) {
+    warnings.push({ level: "warn", text: `Гибка ${t2} мм — по согласованию с производством (стандарт до ${W2.press.standardMaxThickness} мм).` });
   }
   const maxLaser = (_d = W2.laser.maxThickness[mat.id]) != null ? _d : 5;
   if (t2 > maxLaser) {
@@ -12969,6 +12977,7 @@ function itemFromCalc(input, result) {
     laser: result.cost.laser,
     laserLengthM: result.cost.laserLengthM,
     laserPierceCount: result.cost.laserPierceCount,
+    allowRotate: input.allowRotate,
     subtotal: result.cost.subtotal,
     vat: result.cost.vat,
     total: result.cost.total,
@@ -13004,6 +13013,7 @@ function itemFromExtracted(ev, title, client2, quantity, materialShort, thicknes
     laser: ev.cost.laser,
     laserLengthM: ev.cost.laserLengthM,
     laserPierceCount: ev.cost.laserPierceCount,
+    allowRotate: ev.allowRotate,
     subtotal: ev.cost.subtotal,
     vat: ev.cost.vat,
     total: ev.cost.total,
@@ -23959,7 +23969,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BY3rm-EF.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-Dka8QWr8.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -24716,7 +24726,9 @@ function runOnce(pieces, innerW, innerH, margin, gap, sortFn, fitMode) {
         const fr2 = free[ri];
         const candidates = [];
         if (part.width <= fr2.w && part.height <= fr2.h) candidates.push([part.width, part.height, false]);
-        if (part.height <= fr2.w && part.width <= fr2.h) candidates.push([part.height, part.width, true]);
+        if (part.allowRotate !== false && part.height <= fr2.w && part.width <= fr2.h) {
+          candidates.push([part.height, part.width, true]);
+        }
         for (const [pw2, ph2, rot2] of candidates) {
           const lw = fr2.w - pw2;
           const lh = fr2.h - ph2;
@@ -24757,8 +24769,9 @@ function runOnce(pieces, innerW, innerH, margin, gap, sortFn, fitMode) {
   }
   return { sheets, sheetCount: sheets.length };
 }
-function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h, gap = 3, margin = 5) {
+function nestOnSheets(parts, sheetW = WORKSHOP.laser.sheet.w, sheetH = WORKSHOP.laser.sheet.h, thickness = 2, margin = 5) {
   var _a3, _b2;
+  const gap = Math.max(2, Math.ceil(thickness * 1.2));
   const innerW = sheetW - margin * 2;
   const innerH = sheetH - margin * 2;
   const pieces = [];
@@ -24825,10 +24838,11 @@ async function loadFontAsBase64(url) {
   return btoa(binary);
 }
 async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Date()) {
-  var _a3, _b2, _c;
+  var _a3, _b2, _c, _d;
   const grouped = groupItems(items);
   const tot = cartTotals(grouped);
-  const client2 = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.client) != null ? _b2 : { name: "", phone: "", email: "" };
+  const allowRotate = ((_a3 = items[0]) == null ? void 0 : _a3.allowRotate) !== false;
+  const client2 = (_c = (_b2 = items[0]) == null ? void 0 : _b2.client) != null ? _c : { name: "", phone: "", email: "" };
   const pdf = new E("p", "mm", "a4");
   const [regularB64, boldB64] = await Promise.all([
     loadFontAsBase64(robotoRegularUrl),
@@ -24959,7 +24973,7 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
   const breakdown = [
     { label: "Металл", value: tot.metal },
     { label: "Гибка", value: tot.bending },
-    { label: "Лазерная резка", value: (_c = tot.laser) != null ? _c : 0 },
+    { label: "Лазерная резка", value: (_d = tot.laser) != null ? _d : 0 },
     { label: "Наладка инструмента", value: tot.setup }
   ];
   const activeBreakdown = breakdown.filter((r) => r.value > 0);
@@ -25019,12 +25033,34 @@ async function exportReportToPdf(filename, items, date = /* @__PURE__ */ new Dat
     pdf.setFont(FONT, "normal");
     pdf.setFontSize(8.5);
     pdf.setTextColor(60);
+    const totalPlaced = nest.sheets.reduce((s2, sh) => s2 + sh.placed.length, 0);
+    const rotatedCount = nest.sheets.reduce(
+      (s2, sh) => s2 + sh.placed.filter((p2) => p2.rot).length,
+      0
+    );
     pdf.text(
-      `Листов: ${nest.sheetCount}  ·  Использование: ${(nest.utilization * 100).toFixed(1)} %  ·  Деталей: ${nest.sheets.reduce((s2, sh) => s2 + sh.placed.length, 0)}`,
+      `Листов: ${nest.sheetCount}  ·  Использование: ${(nest.utilization * 100).toFixed(1)} %  ·  Деталей: ${totalPlaced}`,
       mx,
       y2
     );
+    y2 += 4;
+    if (allowRotate) {
+      pdf.setTextColor(180, 120, 20);
+      pdf.text(
+        `⟳ Поворот разрешён${rotatedCount > 0 ? `  ·  повёрнуто: ${rotatedCount} из ${totalPlaced}` : "  ·  поворот не потребовался"}`,
+        mx,
+        y2
+      );
+    } else {
+      pdf.setTextColor(80, 90, 110);
+      pdf.text(
+        `▭ Поворот запрещён (направление проката)  ·  все детали в исходной ориентации`,
+        mx,
+        y2
+      );
+    }
     y2 += 5;
+    pdf.setTextColor(0);
     const sheetsPerRow = 2;
     const gapX = 6, gapY = 12;
     const sheetW_draw = (cw - gapX * (sheetsPerRow - 1)) / sheetsPerRow;
@@ -25434,7 +25470,6 @@ async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__P
     y2 += rowH;
   });
   y2 += 2;
-  const totalQty = items.reduce((s2, it2) => s2 + it2.qty, 0);
   const rowItogo = (label, value, boldText = false) => {
     pdf.setFont(F2, boldText ? "bold" : "normal");
     pdf.setFontSize(10);
@@ -25442,9 +25477,6 @@ async function exportInvoiceToPdf(filename, items, invoiceNumber, date = /* @__P
     pdf.text(value, pageW - mx, y2, { align: "right" });
     y2 += 5;
   };
-  pdf.setFont(F2, "bold");
-  pdf.setFontSize(9);
-  pdf.text(`${fmt0(totalQty)}`, mx + cols[0].w + cols[1].w + cols[2].w - 2, y2 - 3, { align: "right" });
   rowItogo("Итого:", fmt2(tot.subtotal));
   rowItogo(`В том числе НДС ${Math.round(R2.vat * 100)}%:`, fmt2(tot.vat));
   rowItogo("Всего к оплате:", fmt2(tot.total), true);
@@ -57160,6 +57192,19 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
             ] })
           ] })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50/50 p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex cursor-pointer items-center gap-2 text-[12px] font-bold text-slate-700", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: tech.allowRotate !== false,
+              onChange: (e) => onTech({ allowRotate: e.target.checked }),
+              className: "h-4 w-4 accent-amber-600"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Разрешить поворот при раскрое" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hint font-normal", children: "снимите, если направление проката критично" })
+        ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 gap-2 sm:grid-cols-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
@@ -57965,13 +58010,42 @@ const COLORS$1 = [
   "#f97316",
   "#6366f1"
 ];
-function NestingView({ parts }) {
-  const result = reactExports.useMemo(() => nestOnSheets(parts), [parts]);
+function NestingView({ parts, thickness = 2, allowRotate = true }) {
+  const result = reactExports.useMemo(
+    () => nestOnSheets(
+      parts.map((p2) => ({ ...p2, allowRotate })),
+      void 0,
+      void 0,
+      thickness
+    ),
+    [parts, thickness, allowRotate]
+  );
   if (parts.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500", children: "Добавьте детали — покажу раскрой листов 2500×1250" });
   }
   const scale = 0.18;
+  const rotatedCount = result.sheets.reduce(
+    (s2, sh) => s2 + sh.placed.filter((p2) => p2.rot).length,
+    0
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-bold ${allowRotate ? "border-amber-200 bg-amber-50/60 text-amber-800" : "border-slate-300 bg-slate-50 text-slate-700"}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-base", children: allowRotate ? "⟳" : "▭" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: allowRotate ? "Поворот деталей разрешён" : "Поворот деталей запрещён (направление проката)" }),
+          allowRotate && rotatedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto rounded-full bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-bold text-white", children: [
+            "повёрнуто: ",
+            rotatedCount,
+            " из ",
+            result.sheets.reduce((s2, sh) => s2 + sh.placed.length, 0)
+          ] }),
+          !allowRotate && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto rounded-full bg-slate-300 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-700", children: "без поворота" })
+        ]
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-3 sm:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-300 bg-amber-50/70 p-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-[10px] font-bold uppercase tracking-wider text-amber-800/70", children: "Листов" }),
@@ -58029,7 +58103,7 @@ function NestingView({ parts }) {
             height: result.sheetH * scale,
             border: "1px solid #cbd5e1"
           },
-          children: sheet.placed.map((p2, i2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          children: sheet.placed.map((p2, i2) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
             {
               className: "absolute rounded-[2px] text-[8px] font-bold text-white",
@@ -58046,7 +58120,25 @@ function NestingView({ parts }) {
                 overflow: "hidden"
               },
               title: `${p2.title} · ${p2.w}×${p2.h} мм`,
-              children: p2.w * scale > 20 && p2.h * scale > 12 ? p2.title.slice(0, 6) : ""
+              children: [
+                p2.rot && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "span",
+                  {
+                    style: {
+                      position: "absolute",
+                      top: 1,
+                      right: 2,
+                      fontSize: 8,
+                      lineHeight: 1,
+                      color: "rgba(255,255,255,0.85)",
+                      fontWeight: 700
+                    },
+                    title: "Повёрнута на 90°",
+                    children: "⟳"
+                  }
+                ),
+                p2.w * scale > 20 && p2.h * scale > 12 ? p2.title.slice(0, 6) : ""
+              ]
             },
             i2
           ))
@@ -58201,7 +58293,10 @@ function StockView({ parts }) {
   ] });
 }
 function CuttingTab({ items }) {
+  var _a3, _b2, _c;
   const [sub, setSub] = reactExports.useState("sheets");
+  const thickness = (_b2 = (_a3 = items[0]) == null ? void 0 : _a3.thickness) != null ? _b2 : 2;
+  const allowRotate = ((_c = items[0]) == null ? void 0 : _c.allowRotate) !== false;
   const sheetParts = reactExports.useMemo(
     () => items.filter((it2) => it2.flat && it2.length).map((it2, i2) => ({
       id: it2.id || `part-${i2}`,
@@ -58242,7 +58337,7 @@ function CuttingTab({ items }) {
         }
       )
     ] }),
-    items.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500", children: "Добавьте позиции в смету — покажу раскрой на листах и хлыстах" }) : sub === "sheets" ? /* @__PURE__ */ jsxRuntimeExports.jsx(NestingView, { parts: sheetParts }) : /* @__PURE__ */ jsxRuntimeExports.jsx(StockView, { parts: stockParts })
+    items.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500", children: "Добавьте позиции в смету — покажу раскрой на листах и хлыстах" }) : sub === "sheets" ? /* @__PURE__ */ jsxRuntimeExports.jsx(NestingView, { parts: sheetParts, thickness, allowRotate }) : /* @__PURE__ */ jsxRuntimeExports.jsx(StockView, { parts: stockParts })
   ] });
 }
 const nf1 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -58476,6 +58571,7 @@ const DEFAULT_INPUT = {
   length: 1e3,
   vMatrix: 16,
   bendMethod: "air",
+  allowRotate: true,
   quantity: 64,
   pressTon: 100,
   setupCost: 500,
@@ -58517,7 +58613,7 @@ function App() {
   const [fileTech, setFileTech] = reactExports.useState(() => {
     var _a3;
     try {
-      return { ...{ materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1e3, forceLength: false, bendsOverride: null, laserEnabled: false, laserPrice: 0, laserPierceCount: 0 }, ...JSON.parse((_a3 = localStorage.getItem("fireprom-files-tech")) != null ? _a3 : "{}") };
+      return { ...{ materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1e3, forceLength: false, bendsOverride: null, laserEnabled: false, laserPrice: 0, laserPierceCount: 0, allowRotate: true }, ...JSON.parse((_a3 = localStorage.getItem("fireprom-files-tech")) != null ? _a3 : "{}") };
     } catch {
       return { materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1e3, forceLength: false, bendsOverride: null };
     }
@@ -58790,4 +58886,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-zL0U0_hp.js.map
+//# sourceMappingURL=index-CoWeHBuW.js.map

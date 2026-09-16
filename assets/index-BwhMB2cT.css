@@ -1032,6 +1032,10 @@
     background-color: var(--color-slate-200);
   }
 
+  .bg-slate-300 {
+    background-color: var(--color-slate-300);
+  }
+
   .bg-slate-800 {
     background-color: var(--color-slate-800);
   }
