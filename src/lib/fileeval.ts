@@ -319,6 +319,19 @@ export function evaluateFile(geom: FileGeom, calibWidthMm: number, p: EvalParams
 
 import { splitLoopsToParts } from "./extract";
 
+/** Проверка: точка внутри полигона (ray casting). */
+function pointInPolygon(p: { x: number; y: number }, poly: { x: number; y: number }[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y;
+    const xj = poly[j].x, yj = poly[j].y;
+    const intersect = yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+
 /** Если в файле несколько независимых контуров — возвращает массив FileEval (по одному на деталь).
  *  Если одна деталь — массив из одного элемента. */
 export function evaluateFileParts(
@@ -327,23 +340,31 @@ export function evaluateFileParts(
   p: EvalParams,
 ): FileEval[] {
   const parts = splitLoopsToParts(geom.rawLoops);
-
-  // Для DXF калибровка не нужна — координаты уже в мм
   const effectiveCalib = geom.source === "dxf" ? 0 : calibWidthMm;
 
-  // Если одна деталь — обычный путь
   if (parts.length <= 1) {
     return [evaluateFile(geom, effectiveCalib, p)];
   }
 
-  // Иначе — по одной детали на FileEval
   return parts.map((part, idx) => {
     const subLoops = [part.outer, ...part.holes];
+
+    const partBends = ((geom as any).bends ?? []).filter((b: any) => {
+      const inOuter =
+        pointInPolygon(b.from, part.outer) || pointInPolygon(b.to, part.outer);
+      if (!inOuter) return false;
+      const inHole = part.holes.some(
+        (h) => pointInPolygon(b.from, h) && pointInPolygon(b.to, h)
+      );
+      return !inHole;
+    });
+
     const subGeom: FileGeom = {
       ...geom,
       rawLoops: subLoops,
+      bends: partBends,
       name: `${geom.name} · деталь ${idx + 1}`,
-    };
+    } as any;
     return evaluateFile(subGeom, effectiveCalib, p);
   });
 }

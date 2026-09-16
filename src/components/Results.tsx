@@ -53,7 +53,15 @@ export default function Results({ input, result, geom }: Props) {
             </span>
           </div>
           <div className="h-[340px] bg-gradient-to-b from-slate-50 to-slate-100">
-            {result.ok && <Scene3D geom={geom} length={input.length} color={mat.color} />}
+            {result.ok && (
+                <Scene3D
+                  geom={geom}
+                  length={input.length}
+                  color={mat.color}
+                  input={input}
+                  result={result}
+                />
+              )}
           </div>
         </div>
         <div className="vis-card">

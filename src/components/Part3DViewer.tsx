@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
@@ -16,7 +16,6 @@ interface Props {
   color?: number;
 }
 
-/** 3D-просмотр одной детали с гибами. Компактный Three.js без React Three Fiber. */
 export default function Part3DViewer({
   polygon,
   bends,
@@ -25,12 +24,17 @@ export default function Part3DViewer({
   color = 0xc9d2dc,
 }: Props) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const [angle, setAngle] = useState(angleDeg);
+
+  useEffect(() => {
+    setAngle(angleDeg);
+  }, [angleDeg]);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount || polygon.length < 3) return;
 
-    const geometry = buildFoldedGeometry(polygon, bends, thickness, angleDeg);
+    const geometry = buildFoldedGeometry(polygon, bends, thickness, angle);
     const diag = geometryDiagonal(geometry);
 
     const renderer = new THREE.WebGLRenderer({
@@ -44,13 +48,8 @@ export default function Part3DViewer({
 
     let paused = false;
     const canvasEl = renderer.domElement;
-    const onLost = (e: Event) => {
-      e.preventDefault();
-      paused = true;
-    };
-    const onRestored = () => {
-      paused = false;
-    };
+    const onLost = (e: Event) => { e.preventDefault(); paused = true; };
+    const onRestored = () => { paused = false; };
     canvasEl.addEventListener("webglcontextlost", onLost, false);
     canvasEl.addEventListener("webglcontextrestored", onRestored, false);
 
@@ -59,7 +58,7 @@ export default function Part3DViewer({
       45,
       mount.clientWidth / Math.max(mount.clientHeight, 1),
       diag / 100,
-      diag * 100,
+      diag * 100
     );
 
     scene.add(new THREE.HemisphereLight(0xdfe8f5, 0x8a93a5, 1.15));
@@ -80,15 +79,11 @@ export default function Part3DViewer({
 
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry, 25),
-      new THREE.LineBasicMaterial({
-        color: 0x1e293b,
-        transparent: true,
-        opacity: 0.4,
-      }),
+      new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.4 })
     );
     scene.add(edges);
 
-    camera.position.set(diag * 0.9, diag * 0.7, diag * 1.1);
+    camera.position.set(diag * 1.2, diag * 0.8, diag * 1.2);
     camera.updateProjectionMatrix();
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -130,7 +125,24 @@ export default function Part3DViewer({
       renderer.dispose();
       if (canvasEl.parentNode === mount) mount.removeChild(canvasEl);
     };
-  }, [polygon, bends, thickness, angleDeg, color]);
+  }, [polygon, bends, thickness, angle, color]);
 
-  return <div ref={mountRef} className="h-full w-full" />;
+  return (
+    <div className="absolute inset-0 flex flex-col">
+      <div className="flex-shrink-0 p-3 bg-gray-50 border-b flex items-center gap-3">
+        <span className="text-sm font-medium text-gray-700 whitespace-nowrap">
+          Угол гиба: {angle}°
+        </span>
+        <input
+          type="range"
+          min="10"
+          max="170"
+          value={angle}
+          onChange={(e) => setAngle(Number(e.target.value))}
+          className="w-full accent-orange-500"
+        />
+      </div>
+      <div ref={mountRef} className="flex-1 min-h-0 w-full" />
+    </div>
+  );
 }

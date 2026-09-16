@@ -454,12 +454,31 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
         const partsArr = partsMap[open3D] ?? [];
         if (!g || partsArr.length === 0) return null;
         const firstPart = partsArr[0];
-        const polygon = firstPart.geom.rawLoops[0]?.map((q: any) => ({ x: q.x, y: q.y })) ?? [];
-        const bends = (g.bends ?? []).map((b: any) => ({
-          from: { x: b.from.x, y: b.from.y },
-          to: { x: b.to.x, y: b.to.y },
-        }));
+        // Для 3D берём ПОЛНЫЙ внешний контур (не разрезанный по линиям гиба).
+        // splitLoopsToParts режет деталь вдоль гибов — для 3D это не годится.
+        const fullOuter = (g.rawLoops ?? [])[0]?.map((q: any) => ({ x: q.x, y: q.y })) ?? [];
+        const polygon = fullOuter.length >= 3 ? fullOuter : firstPart.geom.rawLoops[0]?.map((q: any) => ({ x: q.x, y: q.y })) ?? [];
+        // Фильтруем линии гиба: оставляем только те, чья середина внутри полигона.
+        const bends = ((g.bends ?? []) as any[])
+          .filter((b: any) => {
+            const pt = { x: (b.from.x + b.to.x) / 2, y: (b.from.y + b.to.y) / 2 };
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+              const xi = polygon[i].x, yi = polygon[i].y;
+              const xj = polygon[j].x, yj = polygon[j].y;
+              const inter = (yi > pt.y) !== (yj > pt.y) && pt.x < ((xj - xi) * (pt.y - yi)) / (yj - yi) + xi;
+              if (inter) inside = !inside;
+            }
+            return inside;
+          })
+          .map((b: any) => ({
+            from: { x: b.from.x, y: b.from.y },
+            to: { x: b.to.x, y: b.to.y },
+          }));
         if (polygon.length < 3) return null;
+        console.log("[3D] polygon:", polygon);
+        console.log("[3D] bends:", bends);
+        console.log("[3D] allBends(g):", (g as any).bends);
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -481,7 +500,7 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
                   ✕
                 </button>
               </div>
-              <div className="flex-1 bg-gradient-to-b from-slate-50 to-slate-100">
+              <div className="relative flex-1 min-h-0 bg-gradient-to-b from-slate-50 to-slate-100">
                 <Part3DViewer
                   polygon={polygon}
                   bends={bends}
