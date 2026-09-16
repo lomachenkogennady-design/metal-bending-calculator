@@ -23969,7 +23969,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BEjIwyde.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-ClHb07rD.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -86735,7 +86735,7 @@ function buildFoldedGeometry(polygon, bendLines, thickness, angles) {
   let pieces = [{ poly: polygon, matrix: new Matrix4() }];
   for (let bi = 0; bi < bendLines.length; bi++) {
     const bend = bendLines[bi];
-    const theta = MathUtils.degToRad((_a3 = angleArr[bi]) != null ? _a3 : 90);
+    const theta = Math.PI - MathUtils.degToRad((_a3 = angleArr[bi]) != null ? _a3 : 90);
     const ax = bend.from.x;
     const ay = bend.from.y;
     const dx = bend.to.x - ax;
@@ -86788,13 +86788,6 @@ function buildFoldedGeometry(polygon, bendLines, thickness, angles) {
     -(bb.min.y + bb.max.y) / 2,
     -(bb.min.z + bb.max.z) / 2
   );
-  console.log("[fold3d] built:", {
-    polygonPoints: polygon.length,
-    bendLines: bendLines.length,
-    angleDeg,
-    pieces: pieces.length,
-    vertices: merged.attributes.position.count
-  });
   return merged;
 }
 function geometryDiagonal(g2) {
@@ -86809,14 +86802,14 @@ function Part3DViewer({
   polygon,
   bends,
   thickness,
-  angleDeg: angleDeg2 = 90,
+  angleDeg = 90,
   color = 13226716
 }) {
   const mountRef = reactExports.useRef(null);
-  const [angle, setAngle] = reactExports.useState(angleDeg2);
+  const [angle, setAngle] = reactExports.useState(angleDeg);
   reactExports.useEffect(() => {
-    setAngle(angleDeg2);
-  }, [angleDeg2]);
+    setAngle(angleDeg);
+  }, [angleDeg]);
   reactExports.useEffect(() => {
     const mount = mountRef.current;
     if (!mount || polygon.length < 3) return;
@@ -87479,7 +87472,7 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
                     angleDeg: 90
                   }
                 ) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500", children: bends.length > 0 ? `Гибов: ${bends.length} · угол 90°` : "Гибов не найдено" })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500", children: bends.length > 0 ? `Гибов: ${bends.length}` : "Гибов не найдено" })
               ]
             }
           )
@@ -89392,4 +89385,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-C8gq0aak.js.map
+//# sourceMappingURL=index-C8mWul21.js.map
