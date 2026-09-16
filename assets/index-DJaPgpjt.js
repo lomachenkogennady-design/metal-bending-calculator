@@ -23923,7 +23923,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BaC7KWqK.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-DEMPWY-6.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -28176,10 +28176,19 @@ const ACI = {
   9: "#cbd5e1"
 };
 function parseDxf(text) {
-  var _a3, _b2;
+  var _a3, _b2, _c, _d;
   const ParserCtor = (_a3 = DxfParser == null ? void 0 : DxfParser.default) != null ? _a3 : DxfParser;
   const parser = new ParserCtor();
   const dxf = parser.parseSync(text);
+  if (!dxf || !dxf.entities) {
+    return {
+      polylines: [],
+      bbox: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
+      entityCount: 0
+    };
+  }
+  const insUnits = (_c = (_b2 = dxf.header) == null ? void 0 : _b2["$INSUNITS"]) != null ? _c : 4;
+  const unitScale = insUnits === 1 ? 25.4 : insUnits === 2 ? 304.8 : insUnits === 5 ? 10 : insUnits === 6 ? 1e3 : 1;
   const polylines = [];
   let count = 0;
   const colorOf = (e) => e.color && ACI[e.color] ? ACI[e.color] : void 0;
@@ -28188,7 +28197,7 @@ function parseDxf(text) {
     polylines.push({ pts: closed ? [...pts, pts[0]] : pts, color, dashed });
   };
   const handleEntity = (e, tf) => {
-    var _a4, _b3, _c, _d, _e2, _f, _g, _h, _i, _j, _k, _l, _m;
+    var _a4, _b3, _c2, _d2, _e2, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t;
     if (!e) return;
     count++;
     const c2 = colorOf(e);
@@ -28201,8 +28210,40 @@ function parseDxf(text) {
       }
       case "LWPOLYLINE":
       case "POLYLINE": {
-        const pts = ((_a4 = e.vertices) != null ? _a4 : []).map((v2) => tf([v2.x, v2.y]));
-        pushPoly(pts, c2, !!e.shape || !!e.closed);
+        const verts = (_a4 = e.vertices) != null ? _a4 : [];
+        const expanded = [];
+        for (let i2 = 0; i2 < verts.length; i2++) {
+          const v2 = verts[i2];
+          expanded.push(tf([v2.x, v2.y]));
+          const bulge = (_b3 = v2.bulge) != null ? _b3 : 0;
+          const next = verts[(i2 + 1) % verts.length];
+          if (Math.abs(bulge) > 1e-6 && next) {
+            const x1 = v2.x, y1 = v2.y, x2 = next.x, y2 = next.y;
+            const theta = 4 * Math.atan(bulge);
+            const dx = x2 - x1, dy = y2 - y1;
+            const chord = Math.hypot(dx, dy);
+            if (chord > 1e-9) {
+              const radius = chord / (2 * Math.sin(Math.abs(theta) / 2));
+              const nx = -dy / chord, ny = dx / chord;
+              const h2 = radius * Math.cos(theta / 2);
+              const sign = bulge > 0 ? 1 : -1;
+              const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+              const cx = mx + sign * nx * h2;
+              const cy = my + sign * ny * h2;
+              const a1 = Math.atan2(y1 - cy, x1 - cx);
+              const a2 = Math.atan2(y2 - cy, x2 - cx);
+              let sweep = a2 - a1;
+              if (bulge > 0 && sweep < 0) sweep += Math.PI * 2;
+              if (bulge < 0 && sweep > 0) sweep -= Math.PI * 2;
+              const segs = Math.max(4, Math.ceil(Math.abs(sweep) / (Math.PI / 18)));
+              for (let k2 = 1; k2 < segs; k2++) {
+                const a3 = a1 + sweep * (k2 / segs);
+                expanded.push(tf([cx + radius * Math.cos(a3), cy + radius * Math.sin(a3)]));
+              }
+            }
+          }
+        }
+        pushPoly(expanded, c2, !!e.shape || !!e.closed);
         break;
       }
       case "CIRCLE": {
@@ -28228,8 +28269,32 @@ function parseDxf(text) {
         pushPoly(pts, c2);
         break;
       }
+      case "ELLIPSE": {
+        const center = e.center;
+        const major = (_c2 = e.majorAxisEndPoint) != null ? _c2 : e.majorAxis;
+        if (!center || !major) break;
+        const mx = (_d2 = major.x) != null ? _d2 : major[0];
+        const my = (_e2 = major.y) != null ? _e2 : major[1];
+        const majLen = Math.hypot(mx, my);
+        const minLen = majLen * ((_f = e.axisRatio) != null ? _f : 1);
+        const angle = Math.atan2(my, mx);
+        const start = (_g = e.startAngle) != null ? _g : 0;
+        const end = (_h = e.endAngle) != null ? _h : Math.PI * 2;
+        const pts = [];
+        const n = 72;
+        for (let i2 = 0; i2 <= n; i2++) {
+          const t2 = start + (end - start) * (i2 / n);
+          const ex = majLen * Math.cos(t2);
+          const ey = minLen * Math.sin(t2);
+          const rx = ex * Math.cos(angle) - ey * Math.sin(angle);
+          const ry = ex * Math.sin(angle) + ey * Math.cos(angle);
+          pts.push(tf([center.x + rx, center.y + ry]));
+        }
+        pushPoly(pts, c2);
+        break;
+      }
       case "SPLINE": {
-        const cps = (_c = (_b3 = e.controlPoints) != null ? _b3 : e.fitPoints) != null ? _c : [];
+        const cps = (_j = (_i = e.controlPoints) != null ? _i : e.fitPoints) != null ? _j : [];
         if (cps.length >= 2) {
           const pts = cps.map((p2) => tf(Array.isArray(p2) ? [p2[0], p2[1]] : [p2.x, p2.y]));
           pushPoly(pts, c2, false, true);
@@ -28237,13 +28302,13 @@ function parseDxf(text) {
         break;
       }
       case "INSERT": {
-        const block = (_d = dxf.blocks) == null ? void 0 : _d[e.name];
+        const block = (_k = dxf.blocks) == null ? void 0 : _k[e.name];
         if (!(block == null ? void 0 : block.entities)) break;
-        const ix = (_f = (_e2 = e.position) == null ? void 0 : _e2.x) != null ? _f : 0;
-        const iy = (_h = (_g = e.position) == null ? void 0 : _g.y) != null ? _h : 0;
-        const rot2 = ((_i = e.rotation) != null ? _i : 0) * Math.PI / 180;
-        const sx = (_k = (_j = e.scale) == null ? void 0 : _j.x) != null ? _k : 1;
-        const sy = (_m = (_l = e.scale) == null ? void 0 : _l.y) != null ? _m : 1;
+        const ix = (_m = (_l = e.position) == null ? void 0 : _l.x) != null ? _m : 0;
+        const iy = (_o = (_n = e.position) == null ? void 0 : _n.y) != null ? _o : 0;
+        const rot2 = ((_p = e.rotation) != null ? _p : 0) * Math.PI / 180;
+        const sx = (_r = (_q = e.scale) == null ? void 0 : _q.x) != null ? _r : 1;
+        const sy = (_t = (_s = e.scale) == null ? void 0 : _s.y) != null ? _t : 1;
         const inner = (p2) => {
           const x2 = p2[0] * sx;
           const y2 = p2[1] * sy;
@@ -28256,7 +28321,8 @@ function parseDxf(text) {
       }
     }
   };
-  ((_b2 = dxf.entities) != null ? _b2 : []).forEach((e) => handleEntity(e, (p2) => p2));
+  const applyUnits = (p2) => [p2[0] * unitScale, p2[1] * unitScale];
+  ((_d = dxf.entities) != null ? _d : []).forEach((e) => handleEntity(e, applyUnits));
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   polylines.forEach(
     (pl) => pl.pts.forEach(([x2, y2]) => {
@@ -58644,4 +58710,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-iugfDTxj.js.map
+//# sourceMappingURL=index-DJaPgpjt.js.map
