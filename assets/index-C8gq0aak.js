@@ -23969,7 +23969,7 @@ function le() {
   var h2 = l2.getContext("2d");
   h2.fillStyle = "#fff", h2.fillRect(0, 0, l2.width, l2.height);
   var f2 = { ignoreMouse: true, ignoreAnimation: true, ignoreDimensions: true }, d2 = this;
-  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-S51izD7j.js"), true ? [] : void 0)).catch(function(t3) {
+  return (i.canvg ? Promise.resolve(i.canvg) : __vitePreload(() => import("./index.es-BEjIwyde.js"), true ? [] : void 0)).catch(function(t3) {
     return Promise.reject(new Error("Could not load canvg: " + t3));
   }).then(function(t3) {
     return t3.default ? t3.default : t3;
@@ -55627,7 +55627,7 @@ function loopSignedArea(loop) {
   }
   return s2 / 2;
 }
-function pointInPolygon(p2, poly) {
+function pointInPolygon$1(p2, poly) {
   let inside = false;
   for (let i2 = 0, j2 = poly.length - 1; i2 < poly.length; j2 = i2++) {
     const a2 = poly[i2], b2 = poly[j2];
@@ -55642,7 +55642,7 @@ function partArea(loops) {
   const outer = withData[0];
   let area2 = outer.a;
   for (let i2 = 1; i2 < withData.length; i2++) {
-    if (withData[i2].a < outer.a * 0.98 && pointInPolygon(withData[i2].c, outer.l)) area2 -= withData[i2].a;
+    if (withData[i2].a < outer.a * 0.98 && pointInPolygon$1(withData[i2].c, outer.l)) area2 -= withData[i2].a;
   }
   return Math.max(0, area2);
 }
@@ -55875,7 +55875,7 @@ function splitLoopsToParts(loops) {
     for (let j2 = i2 + 1; j2 < sorted.length; j2++) {
       if (usedAsHole.has(j2)) continue;
       const testPt = sorted[j2].l[0];
-      if (pointInPolygon(testPt, outer.l)) {
+      if (pointInPolygon$1(testPt, outer.l)) {
         holes.push(sorted[j2].l);
         usedAsHole.add(j2);
       }
@@ -56552,6 +56552,16 @@ function evaluateFile(geom, calibWidthMm, p2) {
     notes
   };
 }
+function pointInPolygon(p2, poly) {
+  let inside = false;
+  for (let i2 = 0, j2 = poly.length - 1; i2 < poly.length; j2 = i2++) {
+    const xi = poly[i2].x, yi = poly[i2].y;
+    const xj = poly[j2].x, yj = poly[j2].y;
+    const intersect = yi > p2.y !== yj > p2.y && p2.x < (xj - xi) * (p2.y - yi) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 function evaluateFileParts(geom, calibWidthMm, p2) {
   const parts = splitLoopsToParts(geom.rawLoops);
   const effectiveCalib = geom.source === "dxf" ? 0 : calibWidthMm;
@@ -56559,10 +56569,20 @@ function evaluateFileParts(geom, calibWidthMm, p2) {
     return [evaluateFile(geom, effectiveCalib, p2)];
   }
   return parts.map((part, idx) => {
+    var _a3;
     const subLoops = [part.outer, ...part.holes];
+    const partBends = ((_a3 = geom.bends) != null ? _a3 : []).filter((b2) => {
+      const inOuter = pointInPolygon(b2.from, part.outer) || pointInPolygon(b2.to, part.outer);
+      if (!inOuter) return false;
+      const inHole = part.holes.some(
+        (h2) => pointInPolygon(b2.from, h2) && pointInPolygon(b2.to, h2)
+      );
+      return !inHole;
+    });
     const subGeom = {
       ...geom,
       rawLoops: subLoops,
+      bends: partBends,
       name: `${geom.name} · деталь ${idx + 1}`
     };
     return evaluateFile(subGeom, effectiveCalib, p2);
@@ -73956,8 +73976,8 @@ class Spherical {
    * @return {Spherical} A reference to this spherical.
    */
   makeSafe() {
-    const EPS = 1e-6;
-    this.phi = clamp(this.phi, EPS, Math.PI - EPS);
+    const EPS2 = 1e-6;
+    this.phi = clamp(this.phi, EPS2, Math.PI - EPS2);
     return this;
   }
   /**
@@ -86649,74 +86669,158 @@ function interceptControlUp(event) {
     document2.removeEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
   }
 }
-function buildFoldedGeometry(polygon, bendLines, thickness, angleDeg) {
-  const shape = new Shape(
-    polygon.map((p2) => new Vector2(p2.x, p2.y))
-  );
-  const geometry = new ExtrudeGeometry(shape, {
+const EPS = 1e-6;
+function clipHalfPlane(poly, a2, b2, keepPositive) {
+  const out = [];
+  const dx = b2.x - a2.x;
+  const dy = b2.y - a2.y;
+  const sgn = keepPositive ? 1 : -1;
+  const side = (p2) => ((p2.x - a2.x) * dy - (p2.y - a2.y) * dx) * sgn;
+  for (let i2 = 0; i2 < poly.length; i2++) {
+    const cur = poly[i2];
+    const nxt = poly[(i2 + 1) % poly.length];
+    const sc = side(cur);
+    const sn = side(nxt);
+    if (sc >= -EPS) out.push(cur);
+    if (sc > EPS && sn < -EPS || sc < -EPS && sn > EPS) {
+      const t2 = sc / (sc - sn);
+      out.push({
+        x: cur.x + t2 * (nxt.x - cur.x),
+        y: cur.y + t2 * (nxt.y - cur.y)
+      });
+    }
+  }
+  return out;
+}
+function extrudePoly(poly, thickness) {
+  const shape = new Shape(poly.map((p2) => new Vector2(p2.x, p2.y)));
+  return new ExtrudeGeometry(shape, {
     depth: thickness,
     bevelEnabled: false,
     curveSegments: 6
   });
-  const theta = MathUtils.degToRad(angleDeg);
-  for (const bend of bendLines) {
+}
+function mergeBuffers(geos) {
+  const flat = geos.map((g2) => g2.index ? g2.toNonIndexed() : g2);
+  let total = 0;
+  for (const g2 of flat) total += g2.attributes.position.count;
+  const hasN = flat.every((g2) => g2.attributes.normal);
+  const hasUv = flat.every((g2) => g2.attributes.uv);
+  const pos = new Float32Array(total * 3);
+  const nor = hasN ? new Float32Array(total * 3) : null;
+  const uv = hasUv ? new Float32Array(total * 2) : null;
+  let po = 0;
+  let uo = 0;
+  for (const g2 of flat) {
+    const p2 = g2.attributes.position.array;
+    pos.set(p2, po);
+    if (nor && g2.attributes.normal) {
+      nor.set(g2.attributes.normal.array, po);
+    }
+    if (uv && g2.attributes.uv) {
+      uv.set(g2.attributes.uv.array, uo);
+      uo += g2.attributes.uv.array.length;
+    }
+    po += p2.length;
+  }
+  const merged = new BufferGeometry();
+  merged.setAttribute("position", new BufferAttribute(pos, 3));
+  if (nor) merged.setAttribute("normal", new BufferAttribute(nor, 3));
+  if (uv) merged.setAttribute("uv", new BufferAttribute(uv, 2));
+  return merged;
+}
+function buildFoldedGeometry(polygon, bendLines, thickness, angles) {
+  var _a3;
+  const angleArr = Array.isArray(angles) ? angles : bendLines.map(() => angles);
+  let pieces = [{ poly: polygon, matrix: new Matrix4() }];
+  for (let bi = 0; bi < bendLines.length; bi++) {
+    const bend = bendLines[bi];
+    const theta = MathUtils.degToRad((_a3 = angleArr[bi]) != null ? _a3 : 90);
     const ax = bend.from.x;
     const ay = bend.from.y;
     const dx = bend.to.x - ax;
     const dy = bend.to.y - ay;
     const len = Math.hypot(dx, dy);
-    if (len < 1e-6) continue;
+    if (len < EPS) continue;
     const ux = dx / len;
     const uy = dy / len;
     const axis = new Vector3(ux, uy, 0).normalize();
-    const positions = geometry.attributes.position;
-    for (let i2 = 0; i2 < positions.count; i2++) {
-      const px2 = positions.getX(i2);
-      const py2 = positions.getY(i2);
-      const pz2 = positions.getZ(i2);
-      const side = (px2 - ax) * -uy + (py2 - ay) * ux;
-      if (side > 1e-6) {
-        const p2 = new Vector3(px2 - ax, py2 - ay, pz2);
-        p2.applyAxisAngle(axis, theta);
-        positions.setXYZ(i2, p2.x + ax, p2.y + ay, p2.z);
+    const rot2 = new Matrix4().makeRotationAxis(axis, theta);
+    const t1 = new Matrix4().makeTranslation(-ax, -ay, 0);
+    const t2 = new Matrix4().makeTranslation(ax, ay, 0);
+    const foldM = new Matrix4().multiplyMatrices(t2, rot2).multiply(t1);
+    const next = [];
+    for (const piece of pieces) {
+      const halfA = clipHalfPlane(piece.poly, bend.from, bend.to, true);
+      const halfB = clipHalfPlane(piece.poly, bend.from, bend.to, false);
+      if (halfA.length < 3 || halfB.length < 3) {
+        next.push(piece);
+        continue;
       }
+      next.push({ poly: halfA, matrix: piece.matrix.clone() });
+      next.push({
+        poly: halfB,
+        matrix: new Matrix4().multiplyMatrices(piece.matrix, foldM)
+      });
     }
-    positions.needsUpdate = true;
+    pieces = next;
   }
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  const bb = geometry.boundingBox;
-  geometry.translate(
+  const geos = [];
+  for (const piece of pieces) {
+    if (piece.poly.length < 3) continue;
+    const g2 = extrudePoly(piece.poly, thickness);
+    g2.applyMatrix4(piece.matrix);
+    geos.push(g2);
+  }
+  let merged;
+  if (geos.length === 0) {
+    merged = extrudePoly(polygon, thickness);
+  } else if (geos.length === 1) {
+    merged = geos[0];
+  } else {
+    merged = mergeBuffers(geos);
+  }
+  merged.computeVertexNormals();
+  merged.computeBoundingBox();
+  const bb = merged.boundingBox;
+  merged.translate(
     -(bb.min.x + bb.max.x) / 2,
     -(bb.min.y + bb.max.y) / 2,
     -(bb.min.z + bb.max.z) / 2
   );
-  return geometry;
+  console.log("[fold3d] built:", {
+    polygonPoints: polygon.length,
+    bendLines: bendLines.length,
+    angleDeg,
+    pieces: pieces.length,
+    vertices: merged.attributes.position.count
+  });
+  return merged;
 }
 function geometryDiagonal(g2) {
   g2.computeBoundingBox();
   const bb = g2.boundingBox;
   return Math.max(
     1,
-    Math.hypot(
-      bb.max.x - bb.min.x,
-      bb.max.y - bb.min.y,
-      bb.max.z - bb.min.z
-    )
+    Math.hypot(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z)
   );
 }
 function Part3DViewer({
   polygon,
   bends,
   thickness,
-  angleDeg = 90,
+  angleDeg: angleDeg2 = 90,
   color = 13226716
 }) {
   const mountRef = reactExports.useRef(null);
+  const [angle, setAngle] = reactExports.useState(angleDeg2);
+  reactExports.useEffect(() => {
+    setAngle(angleDeg2);
+  }, [angleDeg2]);
   reactExports.useEffect(() => {
     const mount = mountRef.current;
     if (!mount || polygon.length < 3) return;
-    const geometry = buildFoldedGeometry(polygon, bends, thickness, angleDeg);
+    const geometry = buildFoldedGeometry(polygon, bends, thickness, angle);
     const diag = geometryDiagonal(geometry);
     const renderer = new WebGLRenderer({
       antialias: false,
@@ -86760,14 +86864,10 @@ function Part3DViewer({
     scene.add(new Mesh(geometry, mat));
     const edges = new LineSegments(
       new EdgesGeometry(geometry, 25),
-      new LineBasicMaterial({
-        color: 1976635,
-        transparent: true,
-        opacity: 0.4
-      })
+      new LineBasicMaterial({ color: 1976635, transparent: true, opacity: 0.4 })
     );
     scene.add(edges);
-    camera.position.set(diag * 0.9, diag * 0.7, diag * 1.1);
+    camera.position.set(diag * 1.2, diag * 0.8, diag * 1.2);
     camera.updateProjectionMatrix();
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -86805,8 +86905,28 @@ function Part3DViewer({
       renderer.dispose();
       if (canvasEl.parentNode === mount) mount.removeChild(canvasEl);
     };
-  }, [polygon, bends, thickness, angleDeg, color]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: mountRef, className: "h-full w-full" });
+  }, [polygon, bends, thickness, angle, color]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute inset-0 flex flex-col", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-shrink-0 p-3 bg-gray-50 border-b flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-medium text-gray-700 whitespace-nowrap", children: [
+        "Угол гиба: ",
+        angle,
+        "°"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "range",
+          min: "10",
+          max: "170",
+          value: angle,
+          onChange: (e) => setAngle(Number(e.target.value)),
+          className: "w-full accent-orange-500"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: mountRef, className: "flex-1 min-h-0 w-full" })
+  ] });
 }
 let fid = 1;
 function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onAdd, onAddParts, onEvals }) {
@@ -87299,17 +87419,31 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
     ] }),
     files.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[12px] leading-relaxed text-slate-400", children: "Загрузите чертёж — калькулятор сам измерит габариты, посчитает площадь развёртки, найдёт линии гиба и определит вес, усилие гибки и стоимость. Для сканов укажите один реальный габарит детали, чтобы задать масштаб." }),
     open3D && (() => {
-      var _a4, _b3, _c2, _d2, _e2;
+      var _a4, _b3, _c2, _d2, _e2, _f, _g, _h;
       const g2 = geoms[open3D];
       const partsArr = (_a4 = partsMap[open3D]) != null ? _a4 : [];
       if (!g2 || partsArr.length === 0) return null;
       const firstPart = partsArr[0];
-      const polygon = (_c2 = (_b3 = firstPart.geom.rawLoops[0]) == null ? void 0 : _b3.map((q2) => ({ x: q2.x, y: q2.y }))) != null ? _c2 : [];
-      const bends = ((_d2 = g2.bends) != null ? _d2 : []).map((b2) => ({
+      const fullOuter = (_d2 = (_c2 = ((_b3 = g2.rawLoops) != null ? _b3 : [])[0]) == null ? void 0 : _c2.map((q2) => ({ x: q2.x, y: q2.y }))) != null ? _d2 : [];
+      const polygon = fullOuter.length >= 3 ? fullOuter : (_f = (_e2 = firstPart.geom.rawLoops[0]) == null ? void 0 : _e2.map((q2) => ({ x: q2.x, y: q2.y }))) != null ? _f : [];
+      const bends = ((_g = g2.bends) != null ? _g : []).filter((b2) => {
+        const pt2 = { x: (b2.from.x + b2.to.x) / 2, y: (b2.from.y + b2.to.y) / 2 };
+        let inside = false;
+        for (let i2 = 0, j2 = polygon.length - 1; i2 < polygon.length; j2 = i2++) {
+          const xi = polygon[i2].x, yi = polygon[i2].y;
+          const xj = polygon[j2].x, yj = polygon[j2].y;
+          const inter = yi > pt2.y !== yj > pt2.y && pt2.x < (xj - xi) * (pt2.y - yi) / (yj - yi) + xi;
+          if (inter) inside = !inside;
+        }
+        return inside;
+      }).map((b2) => ({
         from: { x: b2.from.x, y: b2.from.y },
         to: { x: b2.to.x, y: b2.to.y }
       }));
       if (polygon.length < 3) return null;
+      console.log("[3D] polygon:", polygon);
+      console.log("[3D] bends:", bends);
+      console.log("[3D] allBends(g):", g2.bends);
       return /* @__PURE__ */ jsxRuntimeExports.jsx(
         "div",
         {
@@ -87336,12 +87470,12 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
                     }
                   )
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-gradient-to-b from-slate-50 to-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative flex-1 min-h-0 bg-gradient-to-b from-slate-50 to-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
                   Part3DViewer,
                   {
                     polygon,
                     bends,
-                    thickness: (_e2 = firstPart.thickness) != null ? _e2 : tech.thickness,
+                    thickness: (_h = firstPart.thickness) != null ? _h : tech.thickness,
                     angleDeg: 90
                   }
                 ) }),
@@ -87354,12 +87488,330 @@ function FilesTab({ files, onFiles, client: client2, onClient, tech, onTech, onA
     })()
   ] });
 }
-function Scene3D(_props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-slate-500", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-2 text-4xl", children: "🧪" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-bold text-slate-700", children: "ТЕСТ: 3D отключена" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1", children: "Если телефон не перезагружается — причина в WebGL/Three.js" })
+function PartInfo({
+  thickness,
+  widthMm,
+  heightMm,
+  flatMm,
+  lengthMm,
+  nBends,
+  flangeWidths,
+  angleLabel
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none absolute right-2 top-2 z-10 rounded-lg border border-slate-200 bg-white/85 px-3 py-2 text-[11px] leading-relaxed shadow-sm backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Толщина:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-slate-800", children: [
+      thickness,
+      " мм"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Сечение:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-slate-800", children: [
+      Math.round(widthMm),
+      "×",
+      Math.round(heightMm),
+      " мм"
+    ] }),
+    typeof lengthMm === "number" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Длина:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-slate-800", children: [
+        Math.round(lengthMm),
+        " мм"
+      ] })
+    ] }),
+    typeof flatMm === "number" && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Развёртка:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-slate-800", children: [
+        Math.round(flatMm),
+        " мм"
+      ] })
+    ] }),
+    flangeWidths && flangeWidths.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Полки:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-slate-800", children: [
+        flangeWidths.map((v2) => Math.round(v2)).join(" + "),
+        " мм"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Гибов:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-slate-800", children: nBends }),
+    angleLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Углы:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-orange-600", children: angleLabel })
+    ] })
   ] }) });
+}
+class Boundary extends reactExports.Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null };
+  }
+  static getDerivedStateFromError(e) {
+    var _a3;
+    return { err: String((_a3 = e == null ? void 0 : e.message) != null ? _a3 : e) };
+  }
+  render() {
+    if (this.state.err) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-full items-center justify-center p-4 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-red-600", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-1 font-bold", children: "Ошибка 3D" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-mono text-[11px] break-all", children: this.state.err })
+      ] }) });
+    }
+    return this.props.children;
+  }
+}
+function Scene3DInner({ geom, length, color, input, result }) {
+  const [viewMode, setViewMode] = reactExports.useState("3d");
+  const [err, setErr] = reactExports.useState(null);
+  const mountRef = reactExports.useRef(null);
+  const info2 = reactExports.useMemo(() => {
+    var _a3;
+    const bb = (_a3 = geom.bbox) != null ? _a3 : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    const flangeWidths = [];
+    const mp = Array.isArray(geom.moldPoints) ? geom.moldPoints : [];
+    for (let i2 = 0; i2 < mp.length - 1; i2++) {
+      const a2 = mp[i2], b2 = mp[i2 + 1];
+      flangeWidths.push(Math.hypot(b2.x - a2.x, b2.y - a2.y));
+    }
+    const angles = Array.isArray(input.angles) ? input.angles : [];
+    return {
+      thickness: Number(input.thickness) || 0,
+      widthMm: bb.maxX - bb.minX,
+      heightMm: bb.maxY - bb.minY,
+      flatMm: Number(result.flat) || 0,
+      lengthMm: Number(input.length) || 0,
+      nBends: Number(result.nBends) || 0,
+      flangeWidths,
+      angleLabel: angles.slice(0, Number(result.nBends) || 0).map((a2) => `${a2}°`).join(" / ")
+    };
+  }, [geom, result, input]);
+  reactExports.useEffect(() => {
+    var _a3;
+    if (viewMode !== "3d") return;
+    const mount = mountRef.current;
+    if (!mount) return;
+    const poly = Array.isArray(geom.polygon) ? geom.polygon : [];
+    if (poly.length < 3) {
+      setErr("Пустой полигон сечения");
+      return;
+    }
+    setErr(null);
+    let geometry;
+    try {
+      const shape = new Shape(
+        poly.map((p2) => new Vector2(p2.x, p2.y))
+      );
+      geometry = new ExtrudeGeometry(shape, {
+        depth: length,
+        bevelEnabled: false,
+        curveSegments: 12
+      });
+      geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      const bb2 = geometry.boundingBox;
+      geometry.translate(
+        -(bb2.min.x + bb2.max.x) / 2,
+        -(bb2.min.y + bb2.max.y) / 2,
+        -(bb2.min.z + bb2.max.z) / 2
+      );
+    } catch (e) {
+      console.error("[Scene3D] Extrude failed:", e);
+      setErr(String((_a3 = e == null ? void 0 : e.message) != null ? _a3 : e));
+      return;
+    }
+    geometry.computeBoundingBox();
+    const bb = geometry.boundingBox;
+    const diag = Math.max(
+      1,
+      Math.hypot(bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z)
+    );
+    const renderer = new WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    mount.appendChild(renderer.domElement);
+    let paused = false;
+    const onLost = (e) => {
+      e.preventDefault();
+      paused = true;
+    };
+    const onRestored = () => {
+      paused = false;
+    };
+    renderer.domElement.addEventListener("webglcontextlost", onLost);
+    renderer.domElement.addEventListener("webglcontextrestored", onRestored);
+    const scene = new Scene();
+    const camera = new PerspectiveCamera(
+      40,
+      mount.clientWidth / Math.max(mount.clientHeight, 1),
+      diag / 500,
+      diag * 50
+    );
+    scene.add(new HemisphereLight(14674165, 9081765, 1.2));
+    const key = new DirectionalLight(16777215, 2.3);
+    key.position.set(1.2, 1.6, 1.4);
+    scene.add(key);
+    const rim = new DirectionalLight(16101452, 0.7);
+    rim.position.set(-1.6, -0.6, -1.2);
+    scene.add(rim);
+    const fill = new DirectionalLight(16777215, 0.7);
+    fill.position.set(-1, 0.5, -1.5);
+    scene.add(fill);
+    const mat = new MeshStandardMaterial({
+      color,
+      metalness: 0.55,
+      roughness: 0.32,
+      side: DoubleSide
+    });
+    scene.add(new Mesh(geometry, mat));
+    const edges = new LineSegments(
+      new EdgesGeometry(geometry, 20),
+      new LineBasicMaterial({ color: 1976635, transparent: true, opacity: 0.45 })
+    );
+    scene.add(edges);
+    camera.position.set(diag * 0.6, diag * 0.45, diag * 0.8);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.6;
+    controls.addEventListener("start", () => controls.autoRotate = false);
+    let lastFrame = 0;
+    const interval = 1e3 / 30;
+    let raf = 0;
+    const loop = (now) => {
+      raf = requestAnimationFrame(loop);
+      if (paused) return;
+      if (now - lastFrame < interval) return;
+      lastFrame = now;
+      controls.update();
+      renderer.render(scene, camera);
+    };
+    raf = requestAnimationFrame(loop);
+    const ro = new ResizeObserver(() => {
+      const w2 = mount.clientWidth;
+      const h2 = mount.clientHeight;
+      if (w2 === 0 || h2 === 0) return;
+      camera.aspect = w2 / h2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w2, h2);
+    });
+    ro.observe(mount);
+    return () => {
+      cancelAnimationFrame(raf);
+      renderer.domElement.removeEventListener("webglcontextlost", onLost);
+      renderer.domElement.removeEventListener("webglcontextrestored", onRestored);
+      ro.disconnect();
+      controls.dispose();
+      geometry.dispose();
+      mat.dispose();
+      renderer.dispose();
+      if (renderer.domElement.parentNode === mount) {
+        mount.removeChild(renderer.domElement);
+      }
+    };
+  }, [geom, length, color, viewMode]);
+  const svg2d = reactExports.useMemo(() => {
+    const poly = Array.isArray(geom.polygon) ? geom.polygon : [];
+    if (poly.length < 3) return null;
+    const xs = poly.map((p2) => p2.x);
+    const ys = poly.map((p2) => p2.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const w2 = Math.max(maxX - minX, 1);
+    const h2 = Math.max(maxY - minY, 1);
+    const pad = 48, targetW = 640, targetH = 400;
+    const scale = Math.min(targetW / w2, targetH / h2);
+    const vw = w2 * scale + pad * 2;
+    const vh = h2 * scale + pad * 2;
+    const X2 = (x2) => pad + (x2 - minX) * scale;
+    const Y2 = (y2) => vh - pad - (y2 - minY) * scale;
+    const pathD = "M " + poly.map((p2) => `${X2(p2.x).toFixed(2)} ${Y2(p2.y).toFixed(2)}`).join(" L ") + " Z";
+    return { w: w2, h: h2, vw, vh, X: X2, Y: Y2, minX, minY, maxX, maxY, pathD };
+  }, [geom]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute inset-0 flex flex-col", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-[11px] font-bold uppercase tracking-wide text-slate-500", children: [
+        "Профиль · t=",
+        info2.thickness,
+        " мм · ",
+        info2.lengthMm,
+        " мм"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex rounded-lg border border-slate-200 bg-slate-50 p-0.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => setViewMode("2d"),
+            className: `rounded-md px-3 py-1 text-[11px] font-bold transition ${viewMode === "2d" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500"}`,
+            children: "📐 2D"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => setViewMode("3d"),
+            className: `rounded-md px-3 py-1 text-[11px] font-bold transition ${viewMode === "3d" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500"}`,
+            children: "🧊 3D"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative flex-1 min-h-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `absolute inset-0 ${viewMode === "3d" ? "" : "hidden"}`, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: mountRef, className: "absolute inset-0" }),
+        err && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 flex items-center justify-center p-4 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-red-600", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-1 font-bold", children: "Ошибка 3D" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-mono text-[11px] break-all", children: err })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(PartInfo, { ...info2 }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pointer-events-none absolute left-2 top-2 z-10 rounded border border-slate-200 bg-white/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600", children: "🧊 3D" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: `absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 ${viewMode === "2d" ? "" : "hidden"}`,
+          children: [
+            svg2d ? /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: `0 0 ${svg2d.vw} ${svg2d.vh}`, className: "max-h-full max-w-full", preserveAspectRatio: "xMidYMid meet", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("defs", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("pattern", { id: "grid2d", width: "24", height: "24", patternUnits: "userSpaceOnUse", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M 24 0 L 0 0 0 24", fill: "none", stroke: "#e2e8f0", strokeWidth: "0.5" }) }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("rect", { x: "0", y: "0", width: svg2d.vw, height: svg2d.vh, fill: "url(#grid2d)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "path",
+                {
+                  d: svg2d.pathD,
+                  fill: "rgba(37,99,235,0.10)",
+                  stroke: "#1e293b",
+                  strokeWidth: "1.6",
+                  strokeLinejoin: "round",
+                  fillRule: "evenodd"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("text", { x: (svg2d.X(svg2d.minX) + svg2d.X(svg2d.maxX)) / 2, y: svg2d.Y(svg2d.minY) + 32, textAnchor: "middle", fontSize: "12", fill: "#475569", fontFamily: "ui-monospace,monospace", children: [
+                Math.round(svg2d.w),
+                " мм"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("text", { x: svg2d.X(svg2d.minX) - 28, y: (svg2d.Y(svg2d.minY) + svg2d.Y(svg2d.maxY)) / 2, textAnchor: "middle", fontSize: "12", fill: "#475569", fontFamily: "ui-monospace,monospace", transform: `rotate(-90 ${svg2d.X(svg2d.minX) - 28} ${(svg2d.Y(svg2d.minY) + svg2d.Y(svg2d.maxY)) / 2})`, children: [
+                Math.round(svg2d.h),
+                " мм"
+              ] })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-slate-400", children: "Нет данных" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(PartInfo, { ...info2 }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute left-2 top-2 rounded border border-slate-200 bg-white/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600", children: "📐 2D · сечение" })
+          ]
+        }
+      )
+    ] })
+  ] });
+}
+function Scene3D(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(Boundary, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Scene3DInner, { ...props }) });
 }
 function ProfileCanvas({ geom, angles, className }) {
   if (!geom) return null;
@@ -87736,7 +88188,16 @@ function Results({ input, result, geom }) {
             " мм · вращайте мышью"
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-[340px] bg-gradient-to-b from-slate-50 to-slate-100", children: result.ok && /* @__PURE__ */ jsxRuntimeExports.jsx(Scene3D, { geom, length: input.length, color: mat.color }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-[340px] bg-gradient-to-b from-slate-50 to-slate-100", children: result.ok && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Scene3D,
+          {
+            geom,
+            length: input.length,
+            color: mat.color,
+            input,
+            result
+          }
+        ) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "vis-card", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "mb-2 flex items-center justify-between text-[13px] font-bold tracking-wide text-slate-700 uppercase", children: [
@@ -88931,4 +89392,4 @@ export {
   commonjsGlobal as c,
   getDefaultExportFromCjs as g
 };
-//# sourceMappingURL=index-DAJetj4Q.js.map
+//# sourceMappingURL=index-C8gq0aak.js.map
