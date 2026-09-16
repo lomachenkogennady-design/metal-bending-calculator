@@ -1,0 +1,33 @@
+# Зависимости
+node_modules/
+
+# Сборка (лежит отдельно в ветке gh-pages)
+dist/
+
+# Временные файлы
+*.bak
+*.log
+.vite/
+.DS_Store
+
+# Разработка
+dump-profiles.mts
+check-*.mts
+selfcheck.sh
+
+# Vercel/Netlify
+.vercel
+.netlify
+
+# Дубликаты/архивы
+metal-bending-calculator-application*/
+*.zip
+
+# Личные тестовые скрипты
+check.mts
+check2.mts
+
+# Логи проверок
+.chk.log
+.tsc.log
+.vt.log
