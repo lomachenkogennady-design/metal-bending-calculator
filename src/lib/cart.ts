@@ -19,6 +19,8 @@ export interface CartItem {
   laser?: number;
   laserLengthM?: number;
   laserPierceCount?: number;
+  /** Запретить поворот при раскрое */
+  allowRotate?: boolean;
   subtotal: number;
   vat: number;
   total: number;
@@ -51,6 +53,7 @@ export function itemFromCalc(input: CalcInput, result: CalcResult): CartItem {
     laser: result.cost.laser,
     laserLengthM: result.cost.laserLengthM,
     laserPierceCount: result.cost.laserPierceCount,
+    allowRotate: input.allowRotate,
     subtotal: result.cost.subtotal,
     vat: result.cost.vat,
     total: result.cost.total,
@@ -98,6 +101,7 @@ export function itemFromExtracted(
     laser: ev.cost.laser,
     laserLengthM: ev.cost.laserLengthM,
     laserPierceCount: ev.cost.laserPierceCount,
+    allowRotate: (ev as any).allowRotate,
     subtotal: ev.cost.subtotal,
     vat: ev.cost.vat,
     total: ev.cost.total,
@@ -132,4 +136,54 @@ export function fmtWeightText(v: number): string {
   const n = Number(v) || 0;
   if (n > 0 && n < 0.1) return `${(n * 1000).toFixed(1).replace(".", ",")} г`;
   return `${n.toFixed(2).replace(".", ",")} кг`;
+}
+
+
+// ─── Группировка одинаковых деталей ───
+
+/** Убирает авто-суффиксы «· деталь 1», «· А», «· Б» в конце названия */
+function stripPartSuffix(t: string): string {
+  return (t || "")
+    .replace(/\s*·\s*деталь\s*\d+\s*$/i, "")
+    .replace(/\s*·\s*[А-ЯA-Z]\s*$/i, "")
+    .trim();
+}
+
+/** Объединяет позиции с одинаковыми размерами/материалом/толщиной.
+ *  Название берётся от первой позиции группы (без суффикса).
+ *  Количество, вес и деньги суммируются. Setup берётся максимальный (один на партию). */
+export function groupItems(items: CartItem[]): CartItem[] {
+  const groups = new Map<string, CartItem>();
+
+  for (const it of items) {
+    const key = [
+      it.material ?? "",
+      it.thickness ?? 0,
+      Math.round((it.flat ?? 0) * 10),
+      Math.round((it.length ?? 0) * 10),
+      it.bends ?? 0,
+    ].join("|");
+
+    const ex = groups.get(key);
+    if (ex) {
+      ex.qty += it.qty;
+      ex.weightBatch = Math.round((ex.weightBatch + it.weightBatch) * 1000) / 1000;
+      ex.metal += it.metal;
+      ex.bending += it.bending;
+      ex.laser = (ex.laser ?? 0) + (it.laser ?? 0);
+      ex.laserLengthM = Math.round(((ex.laserLengthM ?? 0) + (it.laserLengthM ?? 0)) * 100) / 100;
+      ex.laserPierceCount = (ex.laserPierceCount ?? 0) + (it.laserPierceCount ?? 0);
+      ex.subtotal += it.subtotal;
+      ex.vat += it.vat;
+      ex.total += it.total;
+      if (it.setup > ex.setup) ex.setup = it.setup;
+    } else {
+      groups.set(key, {
+        ...it,
+        title: stripPartSuffix(it.title),
+      });
+    }
+  }
+
+  return Array.from(groups.values());
 }

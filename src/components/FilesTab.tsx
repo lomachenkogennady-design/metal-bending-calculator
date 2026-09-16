@@ -3,6 +3,7 @@ import { MATERIALS, THICKNESSES, recommendedV, fmt, fmtMoney, VAT_RATE } from ".
 import { analyzeFile, evaluateFile, evaluateFileParts, measureUnits, type EvalParams, type FileEval, type FileGeom, type SourceFile } from "../lib/fileeval";
 import type { PartMode } from "../lib/extract";
 import GeoCard from "./GeoCard";
+import Part3DViewer from "./Part3DViewer";
 import NumberField from "./NumberField";
 
 interface Props {
@@ -27,6 +28,7 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [partNames, setPartNames] = useState<Record<string, string[]>>({});
   const [added, setAdded] = useState<Record<string, boolean>>({});
+  const [open3D, setOpen3D] = useState<string | null>(null);
   const dxfRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLInputElement>(null);
@@ -353,7 +355,20 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+            <label className="flex cursor-pointer items-center gap-2 text-[12px] font-bold text-slate-700">
+              <input
+                type="checkbox"
+                checked={tech.allowRotate !== false}
+                onChange={(e) => onTech({ allowRotate: e.target.checked })}
+                className="h-4 w-4 accent-amber-600"
+              />
+              <span>Разрешить поворот при раскрое</span>
+              <span className="hint font-normal">снимите, если направление проката критично</span>
+            </label>
+          </div>
+
+<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <input type="text" className="field" placeholder="Имя" value={client.name}
               onChange={(e) => onClient({ ...client, name: e.target.value })} />
             <input type="text" className="field" placeholder="Телефон" value={client.phone}
@@ -400,6 +415,8 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
                   })
                 }
                 added={!!added[ev.geom.fileId]}
+                hasBends={!!ev.geom.bends && ev.geom.bends.length > 0}
+                onOpen3D={() => setOpen3D(ev.geom.fileId)}
                 onAdd={() => {
                   const fileParts = partsMap[ev.geom.fileId] ?? [];
                   const names = partNames[ev.geom.fileId] ?? [];
@@ -431,6 +448,54 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
           определит вес, усилие гибки и стоимость. Для сканов укажите один реальный габарит детали, чтобы задать масштаб.
         </p>
       )}
+      {/* Модальное окно 3D-просмотра */}
+      {open3D && (() => {
+        const g = geoms[open3D];
+        const partsArr = partsMap[open3D] ?? [];
+        if (!g || partsArr.length === 0) return null;
+        const firstPart = partsArr[0];
+        const polygon = firstPart.geom.rawLoops[0]?.map((q: any) => ({ x: q.x, y: q.y })) ?? [];
+        const bends = (g.bends ?? []).map((b: any) => ({
+          from: { x: b.from.x, y: b.from.y },
+          to: { x: b.to.x, y: b.to.y },
+        }));
+        if (polygon.length < 3) return null;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setOpen3D(null)}
+          >
+            <div
+              className="flex h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                <div className="text-[13px] font-bold uppercase tracking-wide text-slate-700">
+                  🧊 3D-модель · {titles[open3D] || g.name}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpen3D(null)}
+                  className="rounded-lg px-3 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 bg-gradient-to-b from-slate-50 to-slate-100">
+                <Part3DViewer
+                  polygon={polygon}
+                  bends={bends}
+                  thickness={firstPart.thickness ?? tech.thickness}
+                  angleDeg={90}
+                />
+              </div>
+              <div className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500">
+                {bends.length > 0 ? `Гибов: ${bends.length} · угол 90°` : "Гибов не найдено"}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -15,6 +15,10 @@ export default function CuttingTab({ items }: Props) {
   const [sub, setSub] = useState<SubTab>("sheets");
 
   // Листовые детали: у каждой есть flat (длина развёртки) и length (длина изделия)
+  // Толщина и allowRotate из первой позиции (одинаковы для всей партии)
+  const thickness = items[0]?.thickness ?? 2;
+  const allowRotate = items[0]?.allowRotate !== false;
+
   const sheetParts: NestingPart[] = useMemo(
     () =>
       items
@@ -77,7 +81,7 @@ export default function CuttingTab({ items }: Props) {
           Добавьте позиции в смету — покажу раскрой на листах и хлыстах
         </div>
       ) : sub === "sheets" ? (
-        <NestingView parts={sheetParts} />
+        <NestingView parts={sheetParts} thickness={thickness} allowRotate={allowRotate} />
       ) : (
         <StockView parts={stockParts} />
       )}

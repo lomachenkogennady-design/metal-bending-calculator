@@ -6,6 +6,7 @@ import { analyzeRaster, type RasterAnalysis } from "./raster";
 import {
   estimatePart, loopSignedArea, bboxOf, weightFromArea, weightFromSection,
   type ExtractedPart, type PartMode, type Pt,
+  separateContoursAndBends, type BendLine3D,
 } from "./extract";
 import { MATERIALS, VAT_RATE, WASTE_FACTOR, round1, round2, kFactor, innerRadiusFromV, calcLaserCost } from "./bending";
 
@@ -37,6 +38,8 @@ export interface FileGeom {
   /** предложений по калибровке */
   autoScale: boolean;
   warnings: string[];
+  /** Линии гиба (если найдены в DXF на слое BEND) */
+  bends?: BendLine3D[];
 }
 
 export interface EvalParams {
@@ -56,6 +59,8 @@ export interface EvalParams {
   laserEnabled?: boolean;
   laserPrice?: number;         // ₽/м (0 = авто из WORKSHOP)
   laserPierceCount?: number;   // врезок на деталь
+  /** Запретить поворот при раскрое */
+  allowRotate?: boolean;
 }
 
 export interface FileEval {
@@ -98,7 +103,15 @@ export async function analyzeFile(file: SourceFile, pdfPage = 1): Promise<FileGe
     try {
       const dxf = parseDxf(file.text);
       const loops = polyToLoops(dxf.polylines);
-      return { ...base, source: "dxf", rawLoops: loops, unitToMm: 1, unitName: "мм", vectorPaths: dxf.entityCount };
+      {
+      const { bends } = separateContoursAndBends(
+        dxf.polylines.map((pl: any) => ({
+          pts: pl.pts.map(([x, y]: [number, number]) => ({ x, y })),
+          layer: pl.layer,
+        })),
+      );
+      return { ...base, source: "dxf", rawLoops: loops, unitToMm: 1, unitName: "мм", vectorPaths: dxf.entityCount, bends };
+    }
     } catch {
       return { ...base, warnings: ["Не удалось разобрать DXF — проверьте формат файла."] };
     }

@@ -1,4 +1,4 @@
-import { cartTotals, type CartItem } from "../lib/cart";
+import { cartTotals, groupItems, type CartItem } from "../lib/cart";
 import { nestOnSheets } from "../lib/nesting";
 import { fmt0, VAT_RATE } from "../lib/bending";
 
@@ -26,7 +26,8 @@ const th: React.CSSProperties = {
 };
 
 export default function ReportPrint({ items, date }: { items: CartItem[]; date: Date }) {
-  const tot = cartTotals(items);
+  const grouped = groupItems(items);
+  const tot = cartTotals(grouped);
   const client = items[0]?.client ?? { name: "", phone: "", email: "" };
   const dateStr = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
   const num = `КГ-${String(date.getFullYear()).slice(2)}${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -62,7 +63,7 @@ export default function ReportPrint({ items, date }: { items: CartItem[]; date: 
         </div>
         <div style={{ flex: 1, minWidth: 220, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px" }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Позиций в расчёте</div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>{items.length}</div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{grouped.length}</div>
           <div style={{ color: "#475569" }}>общий вес партии: {tot.weight > 0 && tot.weight < 0.1
               ? `${(tot.weight * 1000).toFixed(1).replace(".", ",")} г`
               : `${fmtW(tot.weight)} кг`}</div>
@@ -91,7 +92,7 @@ export default function ReportPrint({ items, date }: { items: CartItem[]; date: 
           </tr>
         </thead>
         <tbody>
-          {items.map((it, i) => (
+          {grouped.map((it, i) => (
             <tr key={it.id}>
               <td style={td}>{i + 1}</td>
               <td style={{ ...td, whiteSpace: "normal", minWidth: 140 }}>

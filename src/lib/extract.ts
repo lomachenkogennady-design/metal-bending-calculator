@@ -397,3 +397,58 @@ export function splitLoopsToParts(loops: Pt[][]): DetectedPart[] {
 
   return parts;
 }
+
+
+// ─── Разделение контуров и линий гиба по слоям ───
+
+export interface BendLine3D {
+  /** Точка начала (мм) */
+  from: Pt;
+  /** Точка конца (мм) */
+  to: Pt;
+  /** Имя слоя-источника */
+  layer: string;
+}
+
+const BEND_LAYER_RE = /bend|fold|gib|сгиб|гиб/i;
+
+/** Возвращает true, если полилиния лежит на слое гиба */
+export function isBendLayer(layer: string | undefined): boolean {
+  return !!layer && BEND_LAYER_RE.test(layer);
+}
+
+/**
+ * Принимает массив всех полилиний (с их слоями) и разделяет:
+ *  - parts: замкнутые контуры (плоские детали)
+ *  - bends: линии гиба (для 3D-визуализации)
+ */
+export function separateContoursAndBends(
+  polylines: { pts: Pt[]; layer?: string; closed?: boolean }[],
+): { parts: Pt[][]; bends: BendLine3D[] } {
+  const parts: Pt[][] = [];
+  const bends: BendLine3D[] = [];
+
+  for (const pl of polylines) {
+    if (isBendLayer(pl.layer)) {
+      // Линия гиба: берём первые и последние точки
+      if (pl.pts.length >= 2) {
+        bends.push({
+          from: pl.pts[0],
+          to: pl.pts[pl.pts.length - 1],
+          layer: pl.layer ?? "BEND",
+        });
+      }
+      continue;
+    }
+
+    // Обычный контур: только замкнутые
+    const first = pl.pts[0];
+    const last = pl.pts[pl.pts.length - 1];
+    const isClosed = Math.hypot(first.x - last.x, first.y - last.y) < 1e-3;
+    if (isClosed && pl.pts.length >= 3) {
+      parts.push(pl.pts);
+    }
+  }
+
+  return { parts, bends };
+}

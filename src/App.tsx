@@ -31,6 +31,7 @@ const DEFAULT_INPUT = {
   length: 1000,
   vMatrix: 16,
     bendMethod: "air" as "air" | "coining",
+    allowRotate: true,
   quantity: 64,
   pressTon: 100,
   setupCost: 500,
@@ -73,7 +74,7 @@ export default function App() {
   // технологические параметры для расчёта по файлам
   const [fileTech, setFileTech] = useState<EvalParams>(() => {
     try {
-      return { ...{ materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat" as const, partLength: 1000, forceLength: false, bendsOverride: null, laserEnabled: false, laserPrice: 0, laserPierceCount: 0 }, ...JSON.parse(localStorage.getItem("fireprom-files-tech") ?? "{}") };
+      return { ...{ materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat" as const, partLength: 1000, forceLength: false, bendsOverride: null, laserEnabled: false, laserPrice: 0, laserPierceCount: 0, allowRotate: true }, ...JSON.parse(localStorage.getItem("fireprom-files-tech") ?? "{}") };
     } catch {
       return { materialId: "stainless", thickness: 2, vMatrix: 16, quantity: 1, metalPrice: 0, pricePerMeter: 50, setupCost: 500, mode: "flat", partLength: 1000, forceLength: false, bendsOverride: null };
     }

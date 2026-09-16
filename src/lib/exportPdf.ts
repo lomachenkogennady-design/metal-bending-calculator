@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { cartTotals, type CartItem } from "./cart";
+import { cartTotals, groupItems, type CartItem } from "./cart";
 import { nestOnSheets } from "./nesting";
 import robotoRegularUrl from "../assets/fonts/Roboto-Regular.ttf?url";
 import robotoBoldUrl from "../assets/fonts/Roboto-Bold.ttf?url";
@@ -30,7 +30,9 @@ export async function exportReportToPdf(
   items: CartItem[],
   date: Date = new Date(),
 ) {
-  const tot = cartTotals(items);
+  const grouped = groupItems(items);
+  const tot = cartTotals(grouped);
+  const allowRotate = (items[0] as any)?.allowRotate !== false;
   const client = items[0]?.client ?? { name: "", phone: "", email: "" };
 
   const pdf = new jsPDF("p", "mm", "a4");
@@ -77,7 +79,7 @@ export async function exportReportToPdf(
   y += 5;
   pdf.setTextColor(80);
   pdf.text(`Контакт: ${client.phone || "—"}${client.email ? " · " + client.email : ""}`, mx, y);
-  pdf.text(`Позиций: ${items.length}  ·  вес партии: ${fmtWeight(tot.weight)}`, pageW - mx, y, { align: "right" });
+  pdf.text(`Позиций: ${grouped.length}  ·  вес партии: ${fmtWeight(tot.weight)}`, pageW - mx, y, { align: "right" });
   pdf.setTextColor(0);
   y += 8;
 
@@ -147,7 +149,7 @@ export async function exportReportToPdf(
 
   drawHeader();
 
-  items.forEach((it, i) => {
+  grouped.forEach((it, i) => {
     ensureSpace(rowH);
     let x = mx;
     cols.forEach((c) => {
@@ -199,7 +201,7 @@ export async function exportReportToPdf(
   y += rowH + 8;
 
   // ─── Раскрой на листах со схемой ───
-  const nestingParts = items
+  const nestingParts = grouped
     .filter((it) => it.flat && it.length)
     .map((it, i) => ({
       id: it.id || `part-${i}`,
@@ -228,12 +230,36 @@ export async function exportReportToPdf(
     pdf.setFont(FONT, "normal");
     pdf.setFontSize(8.5);
     pdf.setTextColor(60);
+    const totalPlaced = nest.sheets.reduce((s, sh) => s + sh.placed.length, 0);
+    const rotatedCount = nest.sheets.reduce(
+      (s, sh) => s + sh.placed.filter((p) => p.rot).length,
+      0,
+    );
     pdf.text(
-      `Листов: ${nest.sheetCount}  ·  Использование: ${(nest.utilization * 100).toFixed(1)} %  ·  Деталей: ${nest.sheets.reduce((s, sh) => s + sh.placed.length, 0)}`,
+      `Листов: ${nest.sheetCount}  ·  Использование: ${(nest.utilization * 100).toFixed(1)} %  ·  Деталей: ${totalPlaced}`,
       mx,
       y,
     );
+    y += 4;
+
+    // Статус поворота
+    if (allowRotate) {
+      pdf.setTextColor(180, 120, 20);
+      pdf.text(
+        `⟳ Поворот разрешён${rotatedCount > 0 ? `  ·  повёрнуто: ${rotatedCount} из ${totalPlaced}` : "  ·  поворот не потребовался"}`,
+        mx,
+        y,
+      );
+    } else {
+      pdf.setTextColor(80, 90, 110);
+      pdf.text(
+        `▭ Поворот запрещён (направление проката)  ·  все детали в исходной ориентации`,
+        mx,
+        y,
+      );
+    }
     y += 5;
+    pdf.setTextColor(0);
 
     // Параметры отрисовки
     const sheetsPerRow = 2;
@@ -280,10 +306,12 @@ export async function exportReportToPdf(
 
       // Детали
       sh.placed.forEach((part, pi) => {
-        const px = sx + part.x * scaleFactor;
-        const py = sy + part.y * scaleFactor;
-        const pw = part.w * scaleFactor;
-        const ph = part.h * scaleFactor;
+        // Визуальный зазор 0.4 мм на бумаге (на экране/печати видно разделение)
+        const visGap = 0.4;
+        const px = sx + part.x * scaleFactor + visGap;
+        const py = sy + part.y * scaleFactor + visGap;
+        const pw = Math.max(0.5, part.w * scaleFactor - visGap * 2);
+        const ph = Math.max(0.5, part.h * scaleFactor - visGap * 2);
 
         const [r, g, b] = COLORS[pi % COLORS.length];
         pdf.setFillColor(r, g, b);

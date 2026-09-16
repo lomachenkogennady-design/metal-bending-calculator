@@ -5,6 +5,8 @@ export interface Polyline {
   pts: [number, number][];
   color?: string;
   dashed?: boolean;
+  /** Имя слоя DXF (CUT — контур, BEND — линия гиба) */
+  layer?: string;
 }
 export interface DxfDrawing {
   polylines: Polyline[];
@@ -46,9 +48,20 @@ export function parseDxf(text: string): DxfDrawing {
   const colorOf = (e: { color?: number }): string | undefined =>
     e.color && ACI[e.color] ? ACI[e.color] : undefined;
 
-  const pushPoly = (pts: [number, number][], color?: string, closed = false, dashed = false) => {
+  const pushPoly = (
+    pts: [number, number][],
+    color?: string,
+    closed = false,
+    dashed = false,
+    layer?: string,
+  ) => {
     if (pts.length < 2) return;
-    polylines.push({ pts: closed ? [...pts, pts[0]] : pts, color, dashed });
+    polylines.push({
+      pts: closed ? [...pts, pts[0]] : pts,
+      color,
+      dashed,
+      layer,
+    });
   };
 
   const handleEntity = (e: any, tf: (p: [number, number]) => [number, number]) => {
@@ -59,7 +72,7 @@ export function parseDxf(text: string): DxfDrawing {
       case "LINE": {
         const a = tf([e.vertices[0].x, e.vertices[0].y]);
         const b = tf([e.vertices[1].x, e.vertices[1].y]);
-        pushPoly([a, b], c);
+        pushPoly([a, b], c, false, false, e.layer);
         break;
       }
       case "LWPOLYLINE":
@@ -101,7 +114,7 @@ export function parseDxf(text: string): DxfDrawing {
           }
         }
 
-        pushPoly(expanded, c, !!e.shape || !!e.closed);
+        pushPoly(expanded, c, !!e.shape || !!e.closed, false, e.layer);
         break;
       }
       case "CIRCLE": {
@@ -110,7 +123,7 @@ export function parseDxf(text: string): DxfDrawing {
           const a = (i / 72) * Math.PI * 2;
           pts.push(tf([e.center.x + e.radius * Math.cos(a), e.center.y + e.radius * Math.sin(a)]));
         }
-        pushPoly(pts, c);
+        pushPoly(pts, c, false, false, e.layer);
         break;
       }
       case "ARC": {
@@ -124,7 +137,7 @@ export function parseDxf(text: string): DxfDrawing {
           const a = a0 + sweep * (i / n);
           pts.push(tf([e.center.x + e.radius * Math.cos(a), e.center.y + e.radius * Math.sin(a)]));
         }
-        pushPoly(pts, c);
+        pushPoly(pts, c, false, false, e.layer);
         break;
       }
       case "ELLIPSE": {
@@ -148,14 +161,14 @@ export function parseDxf(text: string): DxfDrawing {
           const ry = ex * Math.sin(angle) + ey * Math.cos(angle);
           pts.push(tf([center.x + rx, center.y + ry]));
         }
-        pushPoly(pts, c);
+        pushPoly(pts, c, false, false, e.layer);
         break;
       }
       case "SPLINE": {
         const cps = e.controlPoints ?? e.fitPoints ?? [];
         if (cps.length >= 2) {
           const pts = cps.map((p: any) => tf(Array.isArray(p) ? [p[0], p[1]] : [p.x, p.y]));
-          pushPoly(pts, c, false, true);
+          pushPoly(pts, c, false, true, e.layer);
         }
         break;
       }

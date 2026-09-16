@@ -3,6 +3,8 @@ import { nestOnSheets, type NestingPart } from "../lib/nesting";
 
 interface Props {
   parts: NestingPart[];
+  thickness?: number;
+  allowRotate?: boolean;
 }
 
 const COLORS = [
@@ -10,8 +12,16 @@ const COLORS = [
   "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
 ];
 
-export default function NestingView({ parts }: Props) {
-  const result = useMemo(() => nestOnSheets(parts), [parts]);
+export default function NestingView({ parts, thickness = 2, allowRotate = true }: Props) {
+  const result = useMemo(
+    () => nestOnSheets(
+      parts.map(p => ({ ...p, allowRotate })),
+      undefined,
+      undefined,
+      thickness,
+    ),
+    [parts, thickness, allowRotate],
+  );
 
   if (parts.length === 0) {
     return (
@@ -24,8 +34,38 @@ export default function NestingView({ parts }: Props) {
   // Максимальный масштаб отображения (CSS px на мм)
   const scale = 0.18; // 2500 мм → 450 px
 
+  const rotatedCount = result.sheets.reduce(
+    (s, sh) => s + sh.placed.filter((p) => p.rot).length,
+    0,
+  );
+
   return (
     <div className="space-y-4">
+      {/* Индикатор режима раскроя */}
+      <div
+        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px] font-bold ${
+          allowRotate
+            ? "border-amber-200 bg-amber-50/60 text-amber-800"
+            : "border-slate-300 bg-slate-50 text-slate-700"
+        }`}
+      >
+        <span className="text-base">{allowRotate ? "⟳" : "▭"}</span>
+        <span>
+          {allowRotate
+            ? "Поворот деталей разрешён"
+            : "Поворот деталей запрещён (направление проката)"}
+        </span>
+        {allowRotate && rotatedCount > 0 && (
+          <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-bold text-white">
+            повёрнуто: {rotatedCount} из {result.sheets.reduce((s, sh) => s + sh.placed.length, 0)}
+          </span>
+        )}
+        {!allowRotate && (
+          <span className="ml-auto rounded-full bg-slate-300 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-700">
+            без поворота
+          </span>
+        )}
+      </div>
       {/* Сводка */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3">
@@ -88,10 +128,10 @@ export default function NestingView({ parts }: Props) {
                   key={i}
                   className="absolute rounded-[2px] text-[8px] font-bold text-white"
                   style={{
-                    left: p.x * scale,
-                    top: p.y * scale,
-                    width: p.w * scale,
-                    height: p.h * scale,
+                    left: p.x * scale + 1,
+                    top: p.y * scale + 1,
+                    width: Math.max(2, p.w * scale - 2),
+                    height: Math.max(2, p.h * scale - 2),
                     backgroundColor: COLORS[i % COLORS.length],
                     border: "1px solid rgba(0,0,0,0.15)",
                     display: "flex",
@@ -101,6 +141,22 @@ export default function NestingView({ parts }: Props) {
                   }}
                   title={`${p.title} · ${p.w}×${p.h} мм`}
                 >
+                  {p.rot && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 1,
+                        right: 2,
+                        fontSize: 8,
+                        lineHeight: 1,
+                        color: "rgba(255,255,255,0.85)",
+                        fontWeight: 700,
+                      }}
+                      title="Повёрнута на 90°"
+                    >
+                      ⟳
+                    </span>
+                  )}
                   {p.w * scale > 20 && p.h * scale > 12 ? p.title.slice(0, 6) : ""}
                 </div>
               ))}

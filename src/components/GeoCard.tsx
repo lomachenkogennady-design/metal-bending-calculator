@@ -125,6 +125,8 @@ export default function GeoCard({
   partNames,
   onPartNameChange,
   onAdd,
+  onOpen3D,
+  hasBends,
   added,
   onRemove,
 }: {
@@ -138,6 +140,10 @@ export default function GeoCard({
   partNames?: string[];
   onPartNameChange?: (idx: number, name: string) => void;
   onAdd: () => void;
+  /** Открыть 3D-просмотр (только если есть линии гиба) */
+  onOpen3D?: () => void;
+  /** Есть ли гибы у этой детали */
+  hasBends?: boolean;
   added: boolean;
   onRemove: () => void;
 }) {
@@ -284,16 +290,28 @@ export default function GeoCard({
           </ul>
         )}
 
-        <button
-          type="button"
-          onClick={onAdd}
-          disabled={q === "none"}
-          className={`w-full rounded-lg px-4 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-300 ${
-            added ? "bg-emerald-600" : "bg-amber-600 hover:bg-amber-700"
-          }`}
-        >
-          {added ? "✓ Добавлено в смету" : "+ Добавить в смету по геометрии"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onAdd}
+            disabled={q === "none"}
+            className={`flex-1 rounded-lg px-4 py-2.5 text-[13px] font-bold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-300 ${
+              added ? "bg-emerald-600" : "bg-amber-600 hover:bg-amber-700"
+            }`}
+          >
+            {added ? "✓ Добавлено в смету" : "+ Добавить в смету по геометрии"}
+          </button>
+          {hasBends && onOpen3D && (
+            <button
+              type="button"
+              onClick={onOpen3D}
+              className="rounded-lg border-2 border-slate-300 bg-white px-3 py-2.5 text-[13px] font-bold text-slate-700 transition hover:border-slate-900 hover:text-slate-900"
+              title="Показать 3D-модель с гибкой"
+            >
+              🧊 3D
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

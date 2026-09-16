@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { cartTotals, type CartItem } from "./cart";
+import { cartTotals, groupItems, type CartItem } from "./cart";
 import { REQUISITES, sumInWords } from "./requisites";
 import robotoRegularUrl from "../assets/fonts/Roboto-Regular.ttf?url";
 import robotoBoldUrl from "../assets/fonts/Roboto-Bold.ttf?url";
@@ -27,7 +27,8 @@ export async function exportInvoiceToPdf(
   date: Date = new Date(),
 ) {
   const R = REQUISITES;
-  const tot = cartTotals(items);
+  const grouped = groupItems(items);
+  const tot = cartTotals(grouped);
   const client = items[0]?.client ?? { name: "", phone: "", email: "" };
 
   const pdf = new jsPDF("p", "mm", "a4");
@@ -184,7 +185,7 @@ export async function exportInvoiceToPdf(
 
   drawHeader();
 
-  items.forEach((it, i) => {
+  grouped.forEach((it, i) => {
     const price = it.qty > 0 ? it.subtotal / it.qty : 0;
     const rowData = [
       String(i + 1),
@@ -211,7 +212,6 @@ export async function exportInvoiceToPdf(
 
   // ─── Итого ───
   y += 2;
-  const totalQty = items.reduce((s, it) => s + it.qty, 0);
   const rowItogo = (label: string, value: string, boldText = false) => {
     pdf.setFont(F, boldText ? "bold" : "normal");
     pdf.setFontSize(10);
@@ -219,11 +219,6 @@ export async function exportInvoiceToPdf(
     pdf.text(value, pageW - mx, y, { align: "right" });
     y += 5;
   };
-
-  // ВСЕГО по колонке количества
-  pdf.setFont(F, "bold");
-  pdf.setFontSize(9);
-  pdf.text(`${fmt0(totalQty)}`, mx + cols[0].w + cols[1].w + cols[2].w - 2, y - 3, { align: "right" });
 
   rowItogo("Итого:", fmt2(tot.subtotal));
   rowItogo(`В том числе НДС ${Math.round(R.vat * 100)}%:`, fmt2(tot.vat));
@@ -233,7 +228,7 @@ export async function exportInvoiceToPdf(
   // ─── Прописью ───
   pdf.setFont(F, "normal");
   pdf.setFontSize(9);
-  pdf.text(`Всего наименований ${items.length}, на сумму ${fmt2(tot.total)} руб.`, mx, y);
+  pdf.text(`Всего наименований ${grouped.length}, на сумму ${fmt2(tot.total)} руб.`, mx, y);
   y += 5;
   pdf.setFont(F, "bold");
   pdf.text(sumInWords(tot.total), mx, y, { maxWidth: cw });

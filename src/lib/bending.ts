@@ -55,7 +55,11 @@ export const MATERIALS: Material[] = [
   },
 ];
 
-export const THICKNESSES = [0.5, 0.8, 1, 1.2, 1.5, 2];
+/** Все толщины листа 0.5–5.0 мм с шагом 0.1 (46 значений) */
+export const THICKNESSES = Array.from(
+  { length: 46 },
+  (_, i) => Math.round((0.5 + i * 0.1) * 10) / 10,
+);
 
 /** Возможности производства (из памятки для заказчика) */
 export const WORKSHOP = {
@@ -81,7 +85,8 @@ export const WORKSHOP = {
     maxDepthNarrow: 470,
     maxDepthNarrowWidth: 2000,
     minThickness: 0.2,
-    maxThickness: 2,
+    maxThickness: 5,          // технический предел
+    standardMaxThickness: 2,  // стандартный диапазон, больше — по согласованию
     minFlange: 11,
     minClosedBend: 12,
     standardRadiusIsThickness: true,
@@ -142,6 +147,8 @@ export interface CalcInput {
   laserPierceCount?: number;   // врезок на деталь
   /** Точная длина реза, мм — передаётся из polygonLength() */
   cutLengthMm?: number;
+  /** Запретить поворот деталей при раскрое */
+  allowRotate?: boolean;
 }
 
 export interface Warning {
@@ -291,7 +298,9 @@ export function calculate(input: CalcInput): CalcResult {
     warnings.push({ level: "warn", text: `Толщина ${t} мм меньше минимальной для гибки (${W.press.minThickness} мм).` });
   }
   if (t > W.press.maxThickness) {
-    warnings.push({ level: "warn", text: `Гибка ${t} мм превышает стандартную (${W.press.maxThickness} мм) — по согласованию.` });
+    warnings.push({ level: "error", text: `Гибка ${t} мм превышает предел производства (${W.press.maxThickness} мм).` });
+  } else if (t > W.press.standardMaxThickness) {
+    warnings.push({ level: "warn", text: `Гибка ${t} мм — по согласованию с производством (стандарт до ${W.press.standardMaxThickness} мм).` });
   }
 
   const maxLaser = W.laser.maxThickness[mat.id] ?? 5;
