@@ -101,7 +101,9 @@ export function buildFoldedGeometry(
 
   for (let bi = 0; bi < bendLines.length; bi++) {
     const bend = bendLines[bi];
-    const theta = THREE.MathUtils.degToRad(angleArr[bi] ?? 90);
+    // Семантика гибки: 180° = разогнуто (плоско), 90° = прямой угол, 0° = сложено.
+    // theta — угол ДОПОЛНИТЕЛЬНОГО поворота вокруг линии гиба, поэтому берём (180° − угол).
+    const theta = Math.PI - THREE.MathUtils.degToRad(angleArr[bi] ?? 90);
     const ax = bend.from.x;
     const ay = bend.from.y;
     const dx = bend.to.x - ax;
@@ -160,15 +162,6 @@ export function buildFoldedGeometry(
     -(bb.min.y + bb.max.y) / 2,
     -(bb.min.z + bb.max.z) / 2,
   );
-
-  console.log("[fold3d] built:", {
-    polygonPoints: polygon.length,
-    bendLines: bendLines.length,
-    angleDeg,
-    pieces: pieces.length,
-    vertices: merged.attributes.position.count,
-  });
-
   return merged;
 }
 

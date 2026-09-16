@@ -509,7 +509,7 @@ export default function FilesTab({ files, onFiles, client, onClient, tech, onTec
                 />
               </div>
               <div className="border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-500">
-                {bends.length > 0 ? `Гибов: ${bends.length} · угол 90°` : "Гибов не найдено"}
+                {bends.length > 0 ? `Гибов: ${bends.length}` : "Гибов не найдено"}
               </div>
             </div>
           </div>
